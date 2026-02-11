@@ -48,6 +48,10 @@ function getCardClass(text) {
   if (t.includes("bear")) return "card bearish";
   if (t.includes("greed")) return "card warning";
   if (t.includes("fear")) return "card bearish";
+  if (t.includes("complacent")) return "card bullish";
+  if (t.includes("stable")) return "card bullish";
+  if (t.includes("nervous")) return "card bearish";
+  
   return "card neutral";
 }
 
@@ -150,7 +154,7 @@ function DashboardTab({data, lastUpdate}) {
       <div className="grid md:grid-cols-3 gap-6">
 
         <div className={getCardClass(pcr?.zone)}>
-          <div className="section-title">PCR</div>
+          <div className="section-title">Overall PCR</div>
           <KeyValue label="PCR" value={pcr?.pcr}/>
           <KeyValue label="Sentiment" value={pcr?.sentiment}/>
           <KeyValue label="Zone" value={pcr?.zone}/>
@@ -165,7 +169,7 @@ function DashboardTab({data, lastUpdate}) {
         </div>
 
         <div className={getCardClass(oi?.zone)}>
-          <div className="section-title">OI Change PCR</div>
+          <div className="section-title">Intraday OI Change PCR</div>
           <KeyValue label="Value" value={oi?.oi_change_pcr}/>
           <KeyValue label="Sentiment" value={oi?.sentiment}/>
           <KeyValue label="Zone" value={oi?.zone}/>
