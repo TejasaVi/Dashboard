@@ -9,14 +9,15 @@ def option_signal_engine(
     rsi15,
     rsi60,
     pcr,
+    oi_change_pcr,
     vix,
     spot,
     expiry_type="WEEKLY",
-    prev_score=None,          # ← pass last score for smoothing
-    smooth_factor=0.7         # 0.7 = stable, 0.3 = faster reaction
+    prev_score=None,
+    smooth_factor=0.7
 ):
     """
-    Smooth option signal engine
+    Enhanced option signal engine with OI Change PCR
     """
 
     # ----------------------------
@@ -25,7 +26,7 @@ def option_signal_engine(
     raw_score = 50.0
 
     # ----------------------------
-    # MMI (soft influence)
+    # MMI (sentiment)
     # ----------------------------
     if "Extreme Fear" in mmi:
         raw_score += 15
@@ -37,21 +38,18 @@ def option_signal_engine(
         raw_score -= 15
 
     # ----------------------------
-    # RSI (continuous scaling)
+    # RSI (momentum scaling)
     # ----------------------------
     if isinstance(rsi15, (int, float)) and isinstance(rsi60, (int, float)):
         avg_rsi = (rsi15 + rsi60) / 2
 
-        # Oversold zone (30 → 20)
         if avg_rsi < 40:
             raw_score += clamp((40 - avg_rsi) * 0.5, 0, 12)
-
-        # Overbought zone (60 → 80)
         elif avg_rsi > 60:
             raw_score -= clamp((avg_rsi - 60) * 0.5, 0, 12)
 
     # ----------------------------
-    # PCR (smooth curve)
+    # Static PCR (positioning)
     # ----------------------------
     if isinstance(pcr, (int, float)):
         if pcr < 1:
@@ -60,7 +58,28 @@ def option_signal_engine(
             raw_score += clamp((pcr - 1) * 20, 0, 12)
 
     # ----------------------------
-    # VIX (gradual volatility impact)
+    # ✅ OI Change PCR (flow-based weight)
+    # ----------------------------
+    if isinstance(oi_change_pcr, (int, float)):
+
+        # Strong bullish build-up
+        if oi_change_pcr > 1.3:
+            raw_score += clamp((oi_change_pcr - 1.3) * 25, 0, 15)
+
+        # Mild bullish build-up
+        elif 1.1 < oi_change_pcr <= 1.3:
+            raw_score += clamp((oi_change_pcr - 1.1) * 20, 0, 8)
+
+        # Strong bearish build-up
+        elif oi_change_pcr < 0.8:
+            raw_score -= clamp((0.8 - oi_change_pcr) * 25, 0, 15)
+
+        # Mild bearish build-up
+        elif 0.8 <= oi_change_pcr < 0.95:
+            raw_score -= clamp((0.95 - oi_change_pcr) * 20, 0, 8)
+
+    # ----------------------------
+    # VIX (volatility regime)
     # ----------------------------
     if isinstance(vix, (int, float)):
         if vix < 14:
@@ -84,7 +103,7 @@ def option_signal_engine(
     score = round(score, 1)
 
     # ----------------------------
-    # Step 3: Bias bands (wider neutral)
+    # Step 3: Bias bands
     # ----------------------------
     if score >= 62:
         bias = "Bullish"
@@ -111,7 +130,7 @@ def option_signal_engine(
         ]
 
     # ----------------------------
-    # Step 4: Strike logic (unchanged)
+    # Step 4: Strike logic
     # ----------------------------
     if vix < 12:
         base = 50 if expiry_type == "WEEKLY" else 100
@@ -156,10 +175,11 @@ def option_signal_engine(
 
     return {
         "score": score,
-        "raw_score": round(raw_score, 1),   # useful for debugging
+        "raw_score": round(raw_score, 1),
         "bias": bias,
         "primary_action": primary_action,
         "strategy_list": strategy_list,
         "strikes": strikes,
-        "vix": vix
+        "vix": vix,
+        "oi_change_pcr": oi_change_pcr  # debugging visibility
     }
