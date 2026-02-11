@@ -1,18 +1,24 @@
-import json
 from datetime import datetime, time
 
+
+# ==========================================================
+# Utility Functions
+# ==========================================================
 
 def clamp(val, low, high):
     return max(low, min(val, high))
 
 
 def is_market_hours():
+    """
+    NSE Market Hours: 9:15 AM – 3:30 PM IST
+    """
     now = datetime.now().time()
     return time(9, 15) <= now <= time(15, 30)
 
 
 def classify_vix_regime(vix):
-    if vix is None:
+    if not isinstance(vix, (int, float)):
         return "Unknown"
 
     if vix < 13:
@@ -24,6 +30,10 @@ def classify_vix_regime(vix):
     else:
         return "Extreme Volatility"
 
+
+# ==========================================================
+# Main Engine
+# ==========================================================
 
 def option_signal_engine(
     mmi,
@@ -39,28 +49,21 @@ def option_signal_engine(
     confirm_needed=2,
     freeze_after_hours=True
 ):
+    """
+    Institutional-Grade Option Bias Engine
+    Stable schema. Production safe.
+    """
 
-    # --------------------------------------------------
-    # Market Freeze
-    # --------------------------------------------------
-    if freeze_after_hours and not is_market_hours():
-        return {
-            "score": None,
-            "raw_score": None,
-            "bias": "Market Closed",
-            "primary_action": "No Action",
-            "strategy_list": [],
-            "strikes": {"warnings": ["🛑 Market closed: Signals frozen"]},
-            "vix": vix
-        }
+    market_open = is_market_hours()
+    market_status = "Open" if market_open else "Closed"
 
     raw_score = 50.0
     warnings = []
     structural_notes = []
 
-    # --------------------------------------------------
-    # MMI
-    # --------------------------------------------------
+    # ------------------------------------------------------
+    # MMI Influence
+    # ------------------------------------------------------
     if isinstance(mmi, str):
         if "Extreme Fear" in mmi:
             raw_score += 15
@@ -73,9 +76,9 @@ def option_signal_engine(
         elif "Greed" in mmi:
             raw_score -= 8
 
-    # --------------------------------------------------
+    # ------------------------------------------------------
     # RSI Trend Strength
-    # --------------------------------------------------
+    # ------------------------------------------------------
     trend_strength = "Neutral"
 
     if isinstance(rsi15, (int, float)) and isinstance(rsi60, (int, float)):
@@ -92,17 +95,16 @@ def option_signal_engine(
         if abs(delta_rsi) > 8:
             structural_notes.append("Momentum acceleration detected")
 
-    # --------------------------------------------------
-    # PCR
-    # --------------------------------------------------
+    # ------------------------------------------------------
+    # Standard PCR
+    # ------------------------------------------------------
     if isinstance(pcr, (int, float)):
         raw_score += clamp((pcr - 1) * 18, -12, 12)
 
-    # --------------------------------------------------
-    # OI Change PCR (Most Important Structural Input)
-    # --------------------------------------------------
+    # ------------------------------------------------------
+    # OI Change PCR (Structural Build-up)
+    # ------------------------------------------------------
     if isinstance(oi_change_pcr, (int, float)):
-
         if oi_change_pcr > 1.4:
             raw_score += 12
             structural_notes.append("Aggressive PUT writing (Strong bullish build-up)")
@@ -115,16 +117,18 @@ def option_signal_engine(
         elif oi_change_pcr < 0.8:
             raw_score -= 6
             structural_notes.append("Moderate bearish build-up")
+        else:
+            structural_notes.append("Balanced OI build-up")
 
-    # --------------------------------------------------
-    # VIX Regime + Impact
-    # --------------------------------------------------
+    # ------------------------------------------------------
+    # VIX Influence
+    # ------------------------------------------------------
     vix_regime = classify_vix_regime(vix)
 
     if isinstance(vix, (int, float)):
         if vix < 13:
             raw_score += 5
-            warnings.append("Low volatility regime — expansion trades preferred")
+            warnings.append("Low volatility regime — premium expansion likely")
         elif vix > 20:
             raw_score -= 8
             warnings.append("High volatility regime — use defined risk spreads")
@@ -132,9 +136,9 @@ def option_signal_engine(
     raw_score = clamp(raw_score, 0, 100)
     score = round(raw_score, 1)
 
-    # --------------------------------------------------
-    # Breakout Probability Estimation
-    # --------------------------------------------------
+    # ------------------------------------------------------
+    # Breakout Probability
+    # ------------------------------------------------------
     breakout_probability = "Low"
 
     if abs(score - 50) > 20 and trend_strength != "Neutral":
@@ -142,9 +146,9 @@ def option_signal_engine(
     elif abs(score - 50) > 12:
         breakout_probability = "Moderate"
 
-    # --------------------------------------------------
+    # ------------------------------------------------------
     # Bias Bands
-    # --------------------------------------------------
+    # ------------------------------------------------------
     if score >= 62:
         new_bias = "Bullish"
         primary_action = "Buy Calls / Bullish Spread"
@@ -155,9 +159,9 @@ def option_signal_engine(
         new_bias = "Neutral"
         primary_action = "Wait / Non-Directional"
 
-    # --------------------------------------------------
-    # Bias Confirmation
-    # --------------------------------------------------
+    # ------------------------------------------------------
+    # Bias Confirmation Logic
+    # ------------------------------------------------------
     if prev_bias and new_bias != prev_bias:
         if confirm_count < confirm_needed:
             new_bias = prev_bias
@@ -167,9 +171,9 @@ def option_signal_engine(
             confirm_count = 0
             warnings.append("Confirmed structural shift")
 
-    # --------------------------------------------------
-    # Strategy List
-    # --------------------------------------------------
+    # ------------------------------------------------------
+    # Strategy Suggestions
+    # ------------------------------------------------------
     if new_bias == "Bullish":
         strategy_list = [
             "Bull Call Spread",
@@ -195,9 +199,9 @@ def option_signal_engine(
             "Calendar Spread"
         ]
 
-    # --------------------------------------------------
+    # ------------------------------------------------------
     # Strike Logic
-    # --------------------------------------------------
+    # ------------------------------------------------------
     if isinstance(vix, (int, float)):
         if vix < 12:
             base = 50 if expiry_type == "WEEKLY" else 100
@@ -210,7 +214,7 @@ def option_signal_engine(
     else:
         base = 100
 
-    atm = round(spot / 50) * 50 if spot else None
+    atm = round(spot / 50) * 50 if isinstance(spot, (int, float)) else None
 
     strikes = {
         "ce_strike": atm + base if new_bias == "Bullish" and atm else atm,
@@ -223,14 +227,23 @@ def option_signal_engine(
             "sell_pe": atm - base,
             "buy_pe": atm - 2 * base
         } if atm else {},
-        "calendar": {"ce_atm": atm, "pe_atm": atm} if atm else {},
+        "calendar": {
+            "ce_atm": atm,
+            "pe_atm": atm
+        } if atm else {},
         "warnings": warnings + structural_notes
     }
 
-    # --------------------------------------------------
-    # Final Response
-    # --------------------------------------------------
+    # ------------------------------------------------------
+    # Market Closed Handling (Schema Preserved)
+    # ------------------------------------------------------
+    if freeze_after_hours and not market_open:
+        warnings.append("Market closed — informational mode only")
+        primary_action = "No Action Markets Offline"
+
+
     return {
+        "market_status": market_status,
         "score": score,
         "raw_score": round(raw_score, 1),
         "bias": new_bias,
