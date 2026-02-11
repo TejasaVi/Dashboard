@@ -41,43 +41,47 @@ def get_india_vix():
 
 vix_bp = Blueprint("vix", __name__)
 
+def vix_analysis(vix):
+    """
+    Returns market sentiment and action guidance based on VIX value.
 
-def vix_sentiment(vix):
-    if vix < 10:
-        return "Complacent, Market too relaxed, risk of sudden spike"
-    elif 10 <= vix < 12:
-        return "Stable, Low volatility, bullish bias"
-    elif 12 <= vix < 15:
-        return "Normal, Healthy volatility"
-    elif 15 <= vix < 20:
-        return "Nervous, Uncertainty increasing"
-    elif 20 <= vix < 30:
-        return "Fear, High volatility, defensive mode"
-    else:
-        return "Capitulation, Extreme fear, contrarian opportunity"
+    Output:
+    {
+        "vix": float,
+        "sentiment": str,
+        "action": str
+    }
+    """
 
-def vix_action(vix):
-    if vix < 10:
-        return "carry position trades next day, movment will be only in the first 15min candle and rangebound throughout the day unless markets break range, scalping for 2-3 point in ATM options work well."
-    elif 10 <= vix < 12:
-        return "buy ATM options in the direction of market, market will move is same direction throughout the day."
-    elif 12 <= vix < 15:
-        return "Buy OTM options for quick scalping, dont hold for more then 2mins"
-    elif 15 <= vix < 20:
-        return "Avoid options trade, quick and large spikes are seen"
-    elif  vix > 20:
-        return "Avoid options trade in market"
+    # Define ranges and corresponding sentiment/action
+    vix_levels = [
+        (0, 10, "Complacent: Market too relaxed, low perceived risk",
+                  "Market calm and rangebound; avoid aggressive option selling."),
+        (10, 12, "Stable: Low volatility, calm market environment",
+                  "Mild trending possible; caution with heavy OTM option buying."),
+        (12, 15, "Normal: Healthy volatility, balanced market conditions",
+                  "Moderate swings likely; OTM options may move but avoid holding long."),
+        (15, 20, "Nervous: Rising uncertainty, market participants cautious",
+                  "High volatility; avoid selling options or overexposing positions."),
+        (20, 30, "Fear: High volatility, defensive stance dominant",
+                  "Significant swings; limit directional exposure, stay defensive."),
+        (30, float('inf'), "Capitulation: Extreme fear, market highly stressed",
+                           "Extreme volatility; avoid aggressive positions, focus on risk containment.")
+    ]
+
+    # Find the correct range
+    for lower, upper, sentiment, action in vix_levels:
+        if lower <= vix < upper:
+            return {"vix": vix, "sentiment": sentiment, "action": action}
+
+    # Fallback (should never hit)
+    return {"vix": vix, "sentiment": "Unknown", "action": "No guidance available"}
+
 
 @vix_bp.route("/vix", methods=["GET"])
 def vix_check():
     vix = get_india_vix()
-    sentiment = vix_sentiment(vix["value"])
-    action = vix_action(vix["value"])
+    analysis = vix_analysis(vix["value"])
+    
 
-    return jsonify(
-        {
-            "vix": vix["value"],
-            "sentiment": sentiment,
-            "action": action,
-        }
-    )
+    return jsonify(analysis)

@@ -108,9 +108,9 @@ function useAPI() {
 
 function KeyValue({label, value}) {
   return (
-    <div className="flex justify-between py-1 text-sm">
-      <span className="text-gray-400">{label}</span>
-      <span>{value ?? "-"}</span>
+    <div className="flex justify-between py-1 text-sm gap-3 items-start">
+      <span className="text-gray-400 flex-shrink-0 min-w-0">{label}</span>
+      <span className="text-right break-words overflow-wrap-anywhere max-w-[60%]">{value ?? "-"}</span>
     </div>
   );
 }
@@ -154,14 +154,14 @@ function DashboardTab({data, lastUpdate}) {
           <KeyValue label="PCR" value={pcr?.pcr}/>
           <KeyValue label="Sentiment" value={pcr?.sentiment}/>
           <KeyValue label="Zone" value={pcr?.zone}/>
-          <div className="mt-3 text-sm">{pcr?.action}</div>
+          <div className="mt-3 text-sm break-words">{pcr?.action}</div>
         </div>
 
         <div className={getCardClass(vix?.sentiment)}>
           <div className="section-title">VIX</div>
           <KeyValue label="VIX" value={vix?.vix}/>
           <KeyValue label="Sentiment" value={vix?.sentiment}/>
-          <div className="mt-3 text-sm">{vix?.action}</div>
+          <div className="mt-3 text-sm break-words">{vix?.action}</div>
         </div>
 
         <div className={getCardClass(oi?.zone)}>
@@ -169,7 +169,7 @@ function DashboardTab({data, lastUpdate}) {
           <KeyValue label="Value" value={oi?.oi_change_pcr}/>
           <KeyValue label="Sentiment" value={oi?.sentiment}/>
           <KeyValue label="Zone" value={oi?.zone}/>
-          <div className="mt-3 text-sm">{oi?.action}</div>
+          <div className="mt-3 text-sm break-words">{oi?.action}</div>
         </div>
 
         <div className={getCardClass(rsi?.sentiment)}>
@@ -223,7 +223,7 @@ function OptionsEngineTab({data}) {
         <KeyValue label="Score" value={bias?.score}/>
         <KeyValue label="VIX" value={bias?.vix}/>
         <div className="mt-4 border-t border-gray-700 pt-3">
-		<div className="text-sm font-medium">
+		<div className="text-sm font-medium break-words">
 			Execution Guidance: {bias?.primary_action || "Awaiting Setup"}
 		</div>
 </div>
@@ -258,7 +258,7 @@ function MMITab({data}) {
 
         <KeyValue label="Value" value={mmi?.value}/>
         <KeyValue label="Zone" value={mmi?.zone}/>
-        <div className="mt-3 text-sm">{mmi?.action}</div>
+        <div className="mt-3 text-sm break-words">{mmi?.action}</div>
 
         {mmi?.portfolio_guidance && (
           <div className="mt-4 border-t border-gray-700 pt-3 space-y-1">
