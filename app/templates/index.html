@@ -21,6 +21,16 @@ body { background:#0f172a; color:#e2e8f0; }
 .bearish { background:rgba(244,63,94,0.08); border-color:#f43f5e; }
 .neutral { background:rgba(99,102,241,0.08); border-color:#6366f1; }
 .warning { background:rgba(245,158,11,0.08); border-color:#f59e0b; }
+
+.glow-green {
+  animation: glow 1.5s ease forwards;
+}
+
+@keyframes glow {
+  0% { background-color: #10b981; box-shadow: 0 0 5px #10b981; }
+  50% { background-color: #22c55e; box-shadow: 0 0 15px #22c55e; }
+  100% { background-color: #6366f1; box-shadow: none; }
+}
 </style>
 </head>
 
@@ -57,24 +67,17 @@ function getCardClass(text) {
 
 function useAPI() {
   const [data, setData] = useState({});
-  const [lastUpdate, setLastUpdate] = useState("");
 
   function isMarketOpen() {
     const now = new Date();
-
-    // Convert to IST explicitly
     const istTime = new Date(
       now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
     );
-
     const hours = istTime.getHours();
     const minutes = istTime.getMinutes();
-
     const totalMinutes = hours * 60 + minutes;
-
-    const marketOpen = 9 * 60;        // 9:00 AM
-    const marketClose = 15 * 60 + 30; // 3:30 PM
-
+    const marketOpen = 9 * 60;
+    const marketClose = 15 * 60 + 30;
     return totalMinutes >= marketOpen && totalMinutes <= marketClose;
   }
 
@@ -89,26 +92,17 @@ function useAPI() {
       }
     }
     setData(results);
-    setLastUpdate(new Date().toLocaleTimeString());
   }
 
   useEffect(() => {
     fetchAll();
-
-    if (!isMarketOpen()) {
-      // 🚫 Market closed → fetch once only
-      return;
-    }
-
-    // ✅ Market open → keep refreshing
+    if (!isMarketOpen()) return;
     const interval = setInterval(fetchAll, 3000);
     return () => clearInterval(interval);
-
   }, []);
 
-  return { data, lastUpdate };
+  return { data };
 }
-
 
 function KeyValue({label, value}) {
   return (
@@ -144,7 +138,7 @@ function LiveIndicesCard({indices}) {
 
 /* ---------------- DASHBOARD ---------------- */
 
-function DashboardTab({data, lastUpdate}) {
+function DashboardTab({data}) {
   const { pcr, vix, oi, rsi, indices } = data;
 
   return (
@@ -188,34 +182,150 @@ function DashboardTab({data, lastUpdate}) {
   );
 }
 
-/* ---------------- OPTIONS STRATEGY ENGINE ---------------- */
+/* ---------------- STRATEGY ACCORDION ---------------- */
 
-function StrategyAccordion({ name, data }) {
-  const [open, setOpen] = useState(false);
+function StrategyAccordion({ name, data, isOpen, onToggle }) {
+  const [deployed, setDeployed] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+
   if (!data) return null;
+
+  const handleDeploy = (e) => {
+    e.stopPropagation();
+    console.log(`Executed strategy: ${name} with quantity: ${quantity}`);
+    setDeployed(true);
+    setTimeout(() => setDeployed(false), 1500);
+  };
 
   return (
     <div className="border border-gray-700 rounded-lg mt-3 overflow-hidden">
-      <div onClick={() => setOpen(!open)}
-        className="cursor-pointer bg-gray-800 px-4 py-3 flex justify-between items-center hover:bg-gray-700">
+      <div
+        onClick={() => onToggle(name)}
+        className="cursor-pointer bg-gray-800 px-4 py-3 flex justify-between items-center hover:bg-gray-700"
+      >
         <span className="font-medium">{name}</span>
-        <span>{open ? "▲" : "▼"}</span>
+        <span>{isOpen ? "▲" : "▼"}</span>
       </div>
 
-      {open && (
-        <div className="bg-gray-900 px-4 py-3">
+      {isOpen && (
+        <div className="bg-gray-900 px-4 py-3 space-y-2">
           {Object.entries(data).map(([k,v]) => (
             <KeyValue key={k} label={k} value={v}/>
           ))}
+
+          <div className="flex items-center gap-4 mt-2">
+            <select
+              className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
+              value={quantity}
+              onChange={(e) => setQuantity(Number(e.target.value))}
+            >
+              {[...Array(10)].map((_, i) => (
+                <option key={i+1} value={i+1}>{i+1}</option>
+              ))}
+            </select>
+
+            <button
+              onClick={handleDeploy}
+              className={`px-4 py-2 rounded-md text-white ${deployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
+            >
+              Deploy
+            </button>
+            {deployed && <span className="text-green-400 font-medium">Successfully deployed</span>}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
+/* ---------------- ATM OPTIONS CARD ---------------- */
+
+function ATMOptionsCard({ ce, pe }) {
+  const [ceQty, setCeQty] = useState(1);
+  const [peQty, setPeQty] = useState(1);
+  const [ceDeployed, setCeDeployed] = useState(false);
+  const [peDeployed, setPeDeployed] = useState(false);
+
+  const handleCeDeploy = () => {
+    console.log("Deployed CE strike", { ce, ceQty });
+    setCeDeployed(true);
+    setTimeout(() => setCeDeployed(false), 1500);
+  };
+
+  const handlePeDeploy = () => {
+    console.log("Deployed PE strike", { pe, peQty });
+    setPeDeployed(true);
+    setTimeout(() => setPeDeployed(false), 1500);
+  };
+
+  return (
+    <div className="card neutral mt-4 p-4">
+      <div className="section-title">ATM Options</div>
+
+      <div className="grid md:grid-cols-2 gap-6 mt-2">
+
+        {/* CE Strike */}
+        <div className="flex flex-col gap-2">
+          <div className="font-medium">CE Strike</div>
+          <div className="text-sm text-gray-200">{ce ?? "-"}</div>
+          <div className="flex gap-2 mt-1">
+            <select
+              className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
+              value={ceQty}
+              onChange={(e) => setCeQty(Number(e.target.value))}
+            >
+              {[...Array(100)].map((_, i) => (
+                <option key={i+1} value={i+1}>{i+1}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleCeDeploy}
+              className={`px-4 py-2 rounded-md text-white ${ceDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
+            >
+              Deploy CE
+            </button>
+            {ceDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+          </div>
+        </div>
+
+        {/* PE Strike */}
+        <div className="flex flex-col gap-2">
+          <div className="font-medium">PE Strike</div>
+          <div className="text-sm text-gray-200">{pe ?? "-"}</div>
+          <div className="flex gap-2 mt-1">
+            <select
+              className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
+              value={peQty}
+              onChange={(e) => setPeQty(Number(e.target.value))}
+            >
+              {[...Array(100)].map((_, i) => (
+                <option key={i+1} value={i+1}>{i+1}</option>
+              ))}
+            </select>
+            <button
+              onClick={handlePeDeploy}
+              className={`px-4 py-2 rounded-md text-white ${peDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
+            >
+              Deploy PE
+            </button>
+            {peDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- OPTIONS ENGINE TAB ---------------- */
+
 function OptionsEngineTab({data}) {
   const { bias, indices } = data;
+  const [openStrategy, setOpenStrategy] = useState(null);
+
   if (!bias) return null;
+
+  const handleToggle = (name) => setOpenStrategy(openStrategy === name ? null : name);
 
   return (
     <div className="space-y-8">
@@ -227,27 +337,54 @@ function OptionsEngineTab({data}) {
         <KeyValue label="Score" value={bias?.score}/>
         <KeyValue label="VIX" value={bias?.vix}/>
         <div className="mt-4 border-t border-gray-700 pt-3">
-		<div className="text-sm font-medium break-words">
-			Execution Guidance: {bias?.primary_action || "Awaiting Setup"}
-		</div>
-</div>
-
+          <div className="text-sm font-medium break-words">
+            Execution Guidance: {bias?.primary_action || "Awaiting Setup"}
+          </div>
+        </div>
       </div>
 
       <div className="card neutral">
         <div className="section-title">Strategy List</div>
 
-        <StrategyAccordion name="Butterfly" data={bias?.strikes?.butterfly}/>
-        <StrategyAccordion name="Iron Condor" data={bias?.strikes?.iron_condor}/>
-        <StrategyAccordion name="Calendar" data={bias?.strikes?.calendar}/>
-        <StrategyAccordion name="Call Spread" data={bias?.strikes?.spread_ce}/>
-        <StrategyAccordion name="Put Spread" data={bias?.strikes?.spread_pe}/>
+        <StrategyAccordion
+          name="Butterfly"
+          data={bias?.strikes?.butterfly}
+          isOpen={openStrategy === "Butterfly"}
+          onToggle={handleToggle}
+        />
+        <StrategyAccordion
+          name="Iron Condor"
+          data={bias?.strikes?.iron_condor}
+          isOpen={openStrategy === "Iron Condor"}
+          onToggle={handleToggle}
+        />
+        <StrategyAccordion
+          name="Calendar"
+          data={bias?.strikes?.calendar}
+          isOpen={openStrategy === "Calendar"}
+          onToggle={handleToggle}
+        />
+        <StrategyAccordion
+          name="Call Spread"
+          data={bias?.strikes?.spread_ce}
+          isOpen={openStrategy === "Call Spread"}
+          onToggle={handleToggle}
+        />
+        <StrategyAccordion
+          name="Put Spread"
+          data={bias?.strikes?.spread_pe}
+          isOpen={openStrategy === "Put Spread"}
+          onToggle={handleToggle}
+        />
       </div>
+
+      {/* ATM Options Card */}
+      <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} />
     </div>
   );
 }
 
-/* ---------------- MMI INVESTMENT ---------------- */
+/* ---------------- MMI ---------------- */
 
 function MMITab({data}) {
   const { mmi, indices } = data;
@@ -288,20 +425,9 @@ function App() {
     <div className="p-6 max-w-7xl mx-auto">
 
       <div className="flex border-b border-gray-700 mb-6">
-        <div className={`tab ${tab==="dashboard"?"tab-active":""}`}
-          onClick={()=>setTab("dashboard")}>
-          Dashboard
-        </div>
-
-        <div className={`tab ${tab==="options"?"tab-active":""}`}
-          onClick={()=>setTab("options")}>
-          Options Strategy Engine
-        </div>
-
-        <div className={`tab ${tab==="mmi"?"tab-active":""}`}
-          onClick={()=>setTab("mmi")}>
-          MMI (Investment)
-        </div>
+        <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Dashboard</div>
+        <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Options Strategy Engine</div>
+        <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
       </div>
 
       {tab==="dashboard" && <DashboardTab data={data} />}
