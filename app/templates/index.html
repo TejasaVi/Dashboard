@@ -262,53 +262,64 @@ function ATMOptionsCard({ ce, pe }) {
     <div className="card neutral mt-4 p-4">
       <div className="section-title">ATM Options</div>
 
-      <div className="grid md:grid-cols-2 gap-6 mt-2">
+      <div className="grid grid-cols-1 gap-6 mt-2">
 
         {/* CE Strike */}
         <div className="flex flex-col gap-2">
-          <div className="font-medium">CE Strike</div>
-          <div className="text-sm text-gray-200">{ce ?? "-"}</div>
-          <div className="flex gap-2 mt-1">
-            <select
-              className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
-              value={ceQty}
-              onChange={(e) => setCeQty(Number(e.target.value))}
-            >
-              {[...Array(100)].map((_, i) => (
-                <option key={i+1} value={i+1}>{i+1}</option>
-              ))}
-            </select>
-            <button
-              onClick={handleCeDeploy}
-              className={`px-4 py-2 rounded-md text-white ${ceDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
-            >
-              Deploy CE
-            </button>
-            {ceDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <div className="font-medium">CE Strike</div>
+              <div className="text-sm text-gray-200">{ce ?? "-"}</div>
+            </div>
+            <div className="flex gap-2">
+              <select
+                className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
+                value={ceQty}
+                onChange={(e) => setCeQty(Number(e.target.value))}
+              >
+                {[...Array(100)].map((_, i) => (
+                  <option key={i+1} value={i+1}>{i+1}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleCeDeploy}
+                className={`px-4 py-2 rounded-md text-white ${ceDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
+              >
+                Deploy CE
+              </button>
+              {ceDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+            </div>
           </div>
         </div>
 
+        {/* Separator Line */}
+        <div className="border-t border-gray-600 mx-4"></div>
+
         {/* PE Strike */}
         <div className="flex flex-col gap-2">
-          <div className="font-medium">PE Strike</div>
-          <div className="text-sm text-gray-200">{pe ?? "-"}</div>
-          <div className="flex gap-2 mt-1">
-            <select
-              className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
-              value={peQty}
-              onChange={(e) => setPeQty(Number(e.target.value))}
-            >
-              {[...Array(100)].map((_, i) => (
-                <option key={i+1} value={i+1}>{i+1}</option>
-              ))}
-            </select>
-            <button
-              onClick={handlePeDeploy}
-              className={`px-4 py-2 rounded-md text-white ${peDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
-            >
-              Deploy PE
-            </button>
-            {peDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <div className="font-medium">PE Strike</div>
+              <div className="text-sm text-gray-200">{pe ?? "-"}</div>
+            </div>
+            <div className="flex gap-2">
+              <select
+                className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
+                value={peQty}
+                onChange={(e) => setPeQty(Number(e.target.value))}
+              >
+                {[...Array(100)].map((_, i) => (
+                  <option key={i+1} value={i+1}>{i+1}</option>
+                ))}
+              </select>
+              <button
+                onClick={handlePeDeploy}
+                className={`px-4 py-2 rounded-md text-white ${peDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
+              >
+                Deploy PE
+              </button>
+              {peDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+            </div>
           </div>
         </div>
 
@@ -342,6 +353,9 @@ function OptionsEngineTab({data}) {
           </div>
         </div>
       </div>
+
+      {/* ATM Options Card - MOVED ABOVE Strategy List */}
+      <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} />
 
       <div className="card neutral">
         <div className="section-title">Strategy List</div>
@@ -377,9 +391,6 @@ function OptionsEngineTab({data}) {
           onToggle={handleToggle}
         />
       </div>
-
-      {/* ATM Options Card */}
-      <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} />
     </div>
   );
 }
