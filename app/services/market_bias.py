@@ -1,7 +1,28 @@
 import json
+from datetime import datetime, time
+
 
 def clamp(val, low, high):
     return max(low, min(val, high))
+
+
+def is_market_hours():
+    now = datetime.now().time()
+    return time(9, 15) <= now <= time(15, 30)
+
+
+def classify_vix_regime(vix):
+    if vix is None:
+        return "Unknown"
+
+    if vix < 13:
+        return "Low Volatility"
+    elif vix < 18:
+        return "Normal Volatility"
+    elif vix < 23:
+        return "High Volatility"
+    else:
+        return "Extreme Volatility"
 
 
 def option_signal_engine(
@@ -9,177 +30,216 @@ def option_signal_engine(
     rsi15,
     rsi60,
     pcr,
-    oi_change_pcr,
-    vix,
-    spot,
+    oi_change_pcr=None,
+    vix=None,
+    spot=None,
     expiry_type="WEEKLY",
-    prev_score=None,
-    smooth_factor=0.7
+    prev_bias=None,
+    confirm_count=0,
+    confirm_needed=2,
+    freeze_after_hours=True
 ):
-    """
-    Enhanced option signal engine with OI Change PCR
-    """
 
-    # ----------------------------
-    # Step 1: Base score
-    # ----------------------------
+    # --------------------------------------------------
+    # Market Freeze
+    # --------------------------------------------------
+    if freeze_after_hours and not is_market_hours():
+        return {
+            "score": None,
+            "raw_score": None,
+            "bias": "Market Closed",
+            "primary_action": "No Action",
+            "strategy_list": [],
+            "strikes": {"warnings": ["🛑 Market closed: Signals frozen"]},
+            "vix": vix
+        }
+
     raw_score = 50.0
+    warnings = []
+    structural_notes = []
 
-    # ----------------------------
-    # MMI (sentiment)
-    # ----------------------------
-    if "Extreme Fear" in mmi:
-        raw_score += 15
-    elif "Fear" in mmi:
-        raw_score += 8
-    elif "Greed" in mmi:
-        raw_score -= 8
-    elif "Extreme Greed" in mmi:
-        raw_score -= 15
+    # --------------------------------------------------
+    # MMI
+    # --------------------------------------------------
+    if isinstance(mmi, str):
+        if "Extreme Fear" in mmi:
+            raw_score += 15
+            structural_notes.append("Contrarian upside pressure forming")
+        elif "Fear" in mmi:
+            raw_score += 8
+        elif "Extreme Greed" in mmi:
+            raw_score -= 15
+            structural_notes.append("Excess optimism — downside risk elevated")
+        elif "Greed" in mmi:
+            raw_score -= 8
 
-    # ----------------------------
-    # RSI (momentum scaling)
-    # ----------------------------
+    # --------------------------------------------------
+    # RSI Trend Strength
+    # --------------------------------------------------
+    trend_strength = "Neutral"
+
     if isinstance(rsi15, (int, float)) and isinstance(rsi60, (int, float)):
         avg_rsi = (rsi15 + rsi60) / 2
+        delta_rsi = rsi15 - rsi60
 
-        if avg_rsi < 40:
-            raw_score += clamp((40 - avg_rsi) * 0.5, 0, 12)
-        elif avg_rsi > 60:
-            raw_score -= clamp((avg_rsi - 60) * 0.5, 0, 12)
+        if avg_rsi > 60:
+            raw_score -= clamp((avg_rsi - 60) * 0.6, 0, 12)
+            trend_strength = "Strong Uptrend"
+        elif avg_rsi < 40:
+            raw_score += clamp((40 - avg_rsi) * 0.6, 0, 12)
+            trend_strength = "Strong Downtrend"
 
-    # ----------------------------
-    # Static PCR (positioning)
-    # ----------------------------
+        if abs(delta_rsi) > 8:
+            structural_notes.append("Momentum acceleration detected")
+
+    # --------------------------------------------------
+    # PCR
+    # --------------------------------------------------
     if isinstance(pcr, (int, float)):
-        if pcr < 1:
-            raw_score -= clamp((1 - pcr) * 20, 0, 12)
-        else:
-            raw_score += clamp((pcr - 1) * 20, 0, 12)
+        raw_score += clamp((pcr - 1) * 18, -12, 12)
 
-    # ----------------------------
-    # ✅ OI Change PCR (flow-based weight)
-    # ----------------------------
+    # --------------------------------------------------
+    # OI Change PCR (Most Important Structural Input)
+    # --------------------------------------------------
     if isinstance(oi_change_pcr, (int, float)):
 
-        # Strong bullish build-up
-        if oi_change_pcr > 1.3:
-            raw_score += clamp((oi_change_pcr - 1.3) * 25, 0, 15)
-
-        # Mild bullish build-up
-        elif 1.1 < oi_change_pcr <= 1.3:
-            raw_score += clamp((oi_change_pcr - 1.1) * 20, 0, 8)
-
-        # Strong bearish build-up
+        if oi_change_pcr > 1.4:
+            raw_score += 12
+            structural_notes.append("Aggressive PUT writing (Strong bullish build-up)")
+        elif oi_change_pcr > 1.2:
+            raw_score += 6
+            structural_notes.append("Moderate bullish build-up")
+        elif oi_change_pcr < 0.6:
+            raw_score -= 12
+            structural_notes.append("Aggressive CALL writing (Strong bearish build-up)")
         elif oi_change_pcr < 0.8:
-            raw_score -= clamp((0.8 - oi_change_pcr) * 25, 0, 15)
+            raw_score -= 6
+            structural_notes.append("Moderate bearish build-up")
 
-        # Mild bearish build-up
-        elif 0.8 <= oi_change_pcr < 0.95:
-            raw_score -= clamp((0.95 - oi_change_pcr) * 20, 0, 8)
+    # --------------------------------------------------
+    # VIX Regime + Impact
+    # --------------------------------------------------
+    vix_regime = classify_vix_regime(vix)
 
-    # ----------------------------
-    # VIX (volatility regime)
-    # ----------------------------
     if isinstance(vix, (int, float)):
-        if vix < 14:
-            raw_score += clamp((14 - vix) * 1.5, 0, 8)
-        elif vix > 18:
-            raw_score -= clamp((vix - 18) * 1.5, 0, 10)
+        if vix < 13:
+            raw_score += 5
+            warnings.append("Low volatility regime — expansion trades preferred")
+        elif vix > 20:
+            raw_score -= 8
+            warnings.append("High volatility regime — use defined risk spreads")
 
-    # ----------------------------
-    # Clamp raw score
-    # ----------------------------
     raw_score = clamp(raw_score, 0, 100)
+    score = round(raw_score, 1)
 
-    # ----------------------------
-    # Step 2: Smooth score (EMA)
-    # ----------------------------
-    if prev_score is not None:
-        score = (smooth_factor * prev_score) + ((1 - smooth_factor) * raw_score)
-    else:
-        score = raw_score
+    # --------------------------------------------------
+    # Breakout Probability Estimation
+    # --------------------------------------------------
+    breakout_probability = "Low"
 
-    score = round(score, 1)
+    if abs(score - 50) > 20 and trend_strength != "Neutral":
+        breakout_probability = "High"
+    elif abs(score - 50) > 12:
+        breakout_probability = "Moderate"
 
-    # ----------------------------
-    # Step 3: Bias bands
-    # ----------------------------
+    # --------------------------------------------------
+    # Bias Bands
+    # --------------------------------------------------
     if score >= 62:
-        bias = "Bullish"
+        new_bias = "Bullish"
         primary_action = "Buy Calls / Bullish Spread"
-        strategy_list = [
-            "Bull Call Spread", "Bull Put Spread",
-            "Long Straddle", "Long Strangle",
-            "Iron Condor", "Butterfly Spread", "Calendar Spread"
-        ]
     elif score <= 38:
-        bias = "Bearish"
+        new_bias = "Bearish"
         primary_action = "Buy Puts / Bearish Spread"
-        strategy_list = [
-            "Bear Put Spread", "Bear Call Spread",
-            "Long Straddle", "Long Strangle",
-            "Iron Condor", "Butterfly Spread", "Calendar Spread"
-        ]
     else:
-        bias = "Neutral"
+        new_bias = "Neutral"
         primary_action = "Wait / Non-Directional"
+
+    # --------------------------------------------------
+    # Bias Confirmation
+    # --------------------------------------------------
+    if prev_bias and new_bias != prev_bias:
+        if confirm_count < confirm_needed:
+            new_bias = prev_bias
+            confirm_count += 1
+            warnings.append("Shift forming — awaiting confirmation")
+        else:
+            confirm_count = 0
+            warnings.append("Confirmed structural shift")
+
+    # --------------------------------------------------
+    # Strategy List
+    # --------------------------------------------------
+    if new_bias == "Bullish":
         strategy_list = [
-            "Long Straddle", "Long Strangle",
-            "Iron Condor", "Butterfly Spread", "Calendar Spread"
+            "Bull Call Spread",
+            "Bull Put Spread",
+            "Call Ratio Spread",
+            "Calendar Spread",
+            "Iron Condor"
+        ]
+    elif new_bias == "Bearish":
+        strategy_list = [
+            "Bear Put Spread",
+            "Bear Call Spread",
+            "Put Ratio Spread",
+            "Calendar Spread",
+            "Iron Condor"
+        ]
+    else:
+        strategy_list = [
+            "Long Straddle",
+            "Long Strangle",
+            "Iron Condor",
+            "Butterfly Spread",
+            "Calendar Spread"
         ]
 
-    # ----------------------------
-    # Step 4: Strike logic
-    # ----------------------------
-    if vix < 12:
-        base = 50 if expiry_type == "WEEKLY" else 100
-    elif vix < 16:
-        base = 100 if expiry_type == "WEEKLY" else 150
-    elif vix < 20:
-        base = 150 if expiry_type == "WEEKLY" else 250
+    # --------------------------------------------------
+    # Strike Logic
+    # --------------------------------------------------
+    if isinstance(vix, (int, float)):
+        if vix < 12:
+            base = 50 if expiry_type == "WEEKLY" else 100
+        elif vix < 16:
+            base = 100 if expiry_type == "WEEKLY" else 150
+        elif vix < 20:
+            base = 150 if expiry_type == "WEEKLY" else 250
+        else:
+            base = 250 if expiry_type == "WEEKLY" else 400
     else:
-        base = 250 if expiry_type == "WEEKLY" else 400
+        base = 100
 
-    atm = round(spot / 50) * 50
+    atm = round(spot / 50) * 50 if spot else None
 
     strikes = {
-        "ce_strike": atm + base if bias == "Bullish" else atm,
-        "pe_strike": atm - base if bias == "Bearish" else atm,
-        "spread_ce": {"buy": atm, "sell": atm + base},
-        "spread_pe": {"buy": atm - base, "sell": atm},
+        "ce_strike": atm + base if new_bias == "Bullish" and atm else atm,
+        "pe_strike": atm - base if new_bias == "Bearish" and atm else atm,
+        "spread_ce": {"buy": atm, "sell": atm + base} if atm else {},
+        "spread_pe": {"buy": atm - base, "sell": atm} if atm else {},
         "iron_condor": {
             "sell_ce": atm + base,
             "buy_ce": atm + 2 * base,
             "sell_pe": atm - base,
             "buy_pe": atm - 2 * base
-        },
-        "butterfly": {
-            "buy_lower": atm - base,
-            "sell": atm,
-            "buy_upper": atm + base
-        },
-        "calendar": {
-            "ce_atm": atm,
-            "pe_atm": atm
-        },
-        "warnings": []
+        } if atm else {},
+        "calendar": {"ce_atm": atm, "pe_atm": atm} if atm else {},
+        "warnings": warnings + structural_notes
     }
 
-    if vix < 12:
-        strikes["warnings"].append("⚠️ Low VIX: Premium expansion trades preferred")
-    if vix > 20:
-        strikes["warnings"].append("⚠️ High VIX: Risk defined strategies only")
-    if expiry_type == "WEEKLY":
-        strikes["warnings"].append("⏰ Weekly expiry: Theta accelerates")
-
+    # --------------------------------------------------
+    # Final Response
+    # --------------------------------------------------
     return {
         "score": score,
         "raw_score": round(raw_score, 1),
-        "bias": bias,
+        "bias": new_bias,
         "primary_action": primary_action,
         "strategy_list": strategy_list,
         "strikes": strikes,
         "vix": vix,
-        "oi_change_pcr": oi_change_pcr  # debugging visibility
+        "vix_regime": vix_regime,
+        "trend_strength": trend_strength,
+        "breakout_probability": breakout_probability,
+        "confirm_count": confirm_count
     }
