@@ -155,31 +155,6 @@ function NiftyPriceCard({niftyavgs}) {
   return (
     <div className={trendClass}>
       <div className="section-title">NIFTY Trend Analysis</div>
-      
-      {/* Current Price */}
-      {price_data && (
-        <div className="mb-3 pb-3 border-b border-gray-700">
-          <div className="flex justify-between items-center">
-            <span className="text-gray-400">Current Price</span>
-            <span className="text-2xl font-bold text-white">{price_data.close}</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2 mt-3 text-sm">
-            <div>
-              <div className="text-gray-400">High</div>
-              <div className="text-green-400 font-semibold">{price_data.high}</div>
-            </div>
-            <div>
-              <div className="text-gray-400">Low</div>
-              <div className="text-red-400 font-semibold">{price_data.low}</div>
-            </div>
-            <div>
-              <div className="text-gray-400">Volume</div>
-              <div className="text-blue-400 font-semibold">{price_data.volume}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Trend Analysis */}
       {trend_analysis && trend_analysis.length > 0 && (
         <div>
