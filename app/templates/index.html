@@ -77,7 +77,8 @@ const endpoints = {
   mmi: "/api/mmi",
   rsi: "/api/rsi",
   bias: "/api/marketbias",
-  niftyavgs: "/api/niftyavgs"
+  niftyavgs: "/api/niftyavgs",
+  macd: "/api/macd"
 };
 
 function getCardClass(text) {
@@ -288,7 +289,7 @@ function ExponentialMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
 /* ---------------- DASHBOARD ---------------- */
 
 function DashboardTab({data}) {
-  const { pcr, vix, oi, rsi, indices, niftyavgs } = data;
+  const { pcr, vix, oi, rsi, indices, niftyavgs, macd } = data;
   
   const [hiddenCards, setHiddenCards] = useState({
     pcr: false,
@@ -297,7 +298,8 @@ function DashboardTab({data}) {
     rsi: false,
     niftyPrice: false,
     sma: false,
-    ema: false
+    ema: false,
+    macd: false
   });
 
   const toggleCard = (cardName) => {
@@ -365,7 +367,21 @@ function DashboardTab({data}) {
     )},
     { id: 'niftyPrice', component: <NiftyPriceCard niftyavgs={niftyavgs} isHidden={hiddenCards.niftyPrice} onToggle={() => toggleCard('niftyPrice')} /> },
     { id: 'sma', component: <SimpleMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.sma} onToggle={() => toggleCard('sma')} /> },
-    { id: 'ema', component: <ExponentialMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.ema} onToggle={() => toggleCard('ema')} /> }
+    { id: 'ema', component: <ExponentialMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.ema} onToggle={() => toggleCard('ema')} /> },
+    { id: 'macd', component: (
+      <div className={`${getCardClass(macd?.MACD_signal || macd?.Momentum)} ${hiddenCards.macd ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.macd} onToggle={() => toggleCard('macd')} />
+        <div className="section-title">MACD Indicator</div>
+        {!hiddenCards.macd && (
+          <>
+            <KeyValue label="MACD Signal" value={macd?.MACD_signal}/>
+            <KeyValue label="Stochastic" value={macd?.Stochastic_signal}/>
+            <KeyValue label="Momentum" value={macd?.Momentum}/>
+            <div className="mt-3 text-sm break-words">{macd?.Option_Strategy}</div>
+          </>
+        )}
+      </div>
+    )},
   ];
 
   const visibleCards = cards.filter(card => !hiddenCards[card.id]);
