@@ -48,7 +48,8 @@ const endpoints = {
   oi: "/api/oi-change",
   mmi: "/api/mmi",
   rsi: "/api/rsi",
-  bias: "/api/marketbias"
+  bias: "/api/marketbias",
+  niftyavgs: "/api/niftyavgs"
 };
 
 function getCardClass(text) {
@@ -136,10 +137,132 @@ function LiveIndicesCard({indices}) {
   );
 }
 
+/* ---------------- MOVING AVERAGES CARDS ---------------- */
+
+function NiftyPriceCard({niftyavgs}) {
+  if (!niftyavgs) return null;
+
+  const { price_data, trend_analysis } = niftyavgs;
+
+  // Determine overall trend from trend_analysis
+  const hasBullishTrend = trend_analysis?.some(t => t.includes("bullish"));
+  const hasBearishTrend = trend_analysis?.some(t => t.includes("Bearish"));
+  
+  let trendClass = "card neutral";
+  if (hasBullishTrend && !hasBearishTrend) trendClass = "card bullish";
+  else if (hasBearishTrend) trendClass = "card bearish";
+
+  return (
+    <div className={trendClass}>
+      <div className="section-title">NIFTY Trend Analysis</div>
+      
+      {/* Current Price */}
+      {price_data && (
+        <div className="mb-3 pb-3 border-b border-gray-700">
+          <div className="flex justify-between items-center">
+            <span className="text-gray-400">Current Price</span>
+            <span className="text-2xl font-bold text-white">{price_data.close}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 mt-3 text-sm">
+            <div>
+              <div className="text-gray-400">High</div>
+              <div className="text-green-400 font-semibold">{price_data.high}</div>
+            </div>
+            <div>
+              <div className="text-gray-400">Low</div>
+              <div className="text-red-400 font-semibold">{price_data.low}</div>
+            </div>
+            <div>
+              <div className="text-gray-400">Volume</div>
+              <div className="text-blue-400 font-semibold">{price_data.volume}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Trend Analysis */}
+      {trend_analysis && trend_analysis.length > 0 && (
+        <div>
+          <div className="text-sm font-semibold text-gray-300 mb-2">Trend Signals</div>
+          {trend_analysis.map((trend, idx) => (
+            <div key={idx} className="text-sm text-gray-300 py-1">
+              • {trend}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SimpleMovingAveragesCard({niftyavgs}) {
+  if (!niftyavgs) return null;
+
+  const { moving_averages } = niftyavgs;
+
+  return (
+    <div className="card neutral">
+      <div className="section-title">Simple Moving Averages</div>
+      {moving_averages && (
+        <div className="space-y-1">
+          <KeyValue 
+            label="MA 10" 
+            value={`${moving_averages.MA_10?.value} (${moving_averages.MA_10?.position} ${moving_averages.MA_10?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="MA 20" 
+            value={`${moving_averages.MA_20?.value} (${moving_averages.MA_20?.position} ${moving_averages.MA_20?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="MA 50" 
+            value={`${moving_averages.MA_50?.value} (${moving_averages.MA_50?.position} ${moving_averages.MA_50?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="MA 100" 
+            value={`${moving_averages.MA_100?.value} (${moving_averages.MA_100?.position} ${moving_averages.MA_100?.difference_percent}%)`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExponentialMovingAveragesCard({niftyavgs}) {
+  if (!niftyavgs) return null;
+
+  const { exponential_moving_averages } = niftyavgs;
+
+  return (
+    <div className="card neutral">
+      <div className="section-title">Exponential Moving Averages</div>
+      {exponential_moving_averages && (
+        <div className="space-y-1">
+          <KeyValue 
+            label="EMA 10" 
+            value={`${exponential_moving_averages.EMA_10?.value} (${exponential_moving_averages.EMA_10?.position} ${exponential_moving_averages.EMA_10?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="EMA 20" 
+            value={`${exponential_moving_averages.EMA_20?.value} (${exponential_moving_averages.EMA_20?.position} ${exponential_moving_averages.EMA_20?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="EMA 50" 
+            value={`${exponential_moving_averages.EMA_50?.value} (${exponential_moving_averages.EMA_50?.position} ${exponential_moving_averages.EMA_50?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="EMA 100" 
+            value={`${exponential_moving_averages.EMA_100?.value} (${exponential_moving_averages.EMA_100?.position} ${exponential_moving_averages.EMA_100?.difference_percent}%)`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- DASHBOARD ---------------- */
 
 function DashboardTab({data}) {
-  const { pcr, vix, oi, rsi, indices } = data;
+  const { pcr, vix, oi, rsi, indices, niftyavgs } = data;
 
   return (
     <div className="space-y-8">
@@ -176,6 +299,15 @@ function DashboardTab({data}) {
           <KeyValue label="RSI 1hr" value={rsi?.rsi1hr}/>
           <KeyValue label="Sentiment" value={rsi?.sentiment}/>
         </div>
+
+        {/* NIFTY Price and Trend Card */}
+        <NiftyPriceCard niftyavgs={niftyavgs} />
+
+        {/* Simple Moving Averages Card */}
+        <SimpleMovingAveragesCard niftyavgs={niftyavgs} />
+
+        {/* Exponential Moving Averages Card */}
+        <ExponentialMovingAveragesCard niftyavgs={niftyavgs} />
 
       </div>
     </div>
@@ -436,8 +568,8 @@ function App() {
     <div className="p-6 max-w-7xl mx-auto">
 
       <div className="flex border-b border-gray-700 mb-6">
-        <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Dashboard</div>
-        <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Options Strategy Engine</div>
+        <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
+        <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
         <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
       </div>
 
