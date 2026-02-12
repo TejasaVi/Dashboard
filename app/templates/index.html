@@ -305,8 +305,8 @@ function ExponentialMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
 
 function DashboardTab({data}) {
   const { pcr, vix, oi, rsi, indices, niftyavgs, macd } = data;
-  
-  const [hiddenCards, setHiddenCards] = useState({
+  const hiddenCardsStorageKey = "dashboardHiddenCards";
+  const defaultHiddenCards = {
     pcr: false,
     vix: false,
     oi: false,
@@ -315,7 +315,23 @@ function DashboardTab({data}) {
     sma: false,
     ema: false,
     macd: false
+  };
+  
+  const [hiddenCards, setHiddenCards] = useState(() => {
+    try {
+      const savedHiddenCards = localStorage.getItem(hiddenCardsStorageKey);
+      if (!savedHiddenCards) return defaultHiddenCards;
+
+      const parsedHiddenCards = JSON.parse(savedHiddenCards);
+      return { ...defaultHiddenCards, ...parsedHiddenCards };
+    } catch {
+      return defaultHiddenCards;
+    }
   });
+
+  useEffect(() => {
+    localStorage.setItem(hiddenCardsStorageKey, JSON.stringify(hiddenCards));
+  }, [hiddenCards]);
 
   const toggleCard = (cardName) => {
     setHiddenCards(prev => ({
