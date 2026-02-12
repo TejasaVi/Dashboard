@@ -677,6 +677,17 @@ function MMITab({data}) {
   );
 }
 
+function FiiDiiTab() {
+  return (
+    <div className="bg-black border border-gray-800 rounded-xl min-h-[65vh] flex items-center justify-center">
+      <div className="text-center px-6">
+        <div className="text-xl font-semibold text-gray-200">FII DII Data</div>
+        <div className="text-sm text-gray-500 mt-2">Data view coming soon.</div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- MAIN APP ---------------- */
 
 function App() {
@@ -690,11 +701,13 @@ function App() {
         <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
         <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
         <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
+        <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
       </div>
 
       {tab==="dashboard" && <DashboardTab data={data} />}
       {tab==="options" && <OptionsEngineTab data={data} />}
       {tab==="mmi" && <MMITab data={data} />}
+      {tab==="fii-dii" && <FiiDiiTab />}
 
     </div>
   );
