@@ -12,7 +12,7 @@
 
 <style>
 body { background:#0f172a; color:#e2e8f0; }
-.card { border-radius:14px; padding:20px; border:1px solid #1f2937; transition:0.3s; }
+.card { border-radius:14px; padding:20px; border:1px solid #1f2937; transition:0.3s; position: relative; }
 .section-title { font-size:18px; font-weight:600; margin-bottom:10px; }
 .tab { cursor:pointer; padding:12px 20px; }
 .tab-active { border-bottom:2px solid #6366f1; }
@@ -30,6 +30,34 @@ body { background:#0f172a; color:#e2e8f0; }
   0% { background-color: #10b981; box-shadow: 0 0 5px #10b981; }
   50% { background-color: #22c55e; box-shadow: 0 0 15px #22c55e; }
   100% { background-color: #6366f1; box-shadow: none; }
+}
+
+.toggle-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid #6366f1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  z-index: 10;
+}
+
+.toggle-btn:hover {
+  background: rgba(99, 102, 241, 0.3);
+  transform: scale(1.05);
+}
+
+.card-hidden {
+  opacity: 0.4;
+  height: 60px;
+  overflow: hidden;
 }
 </style>
 </head>
@@ -114,6 +142,28 @@ function KeyValue({label, value}) {
   );
 }
 
+function ToggleButton({ isHidden, onToggle }) {
+  return (
+    <button
+      onClick={onToggle}
+      className="toggle-btn"
+      title={isHidden ? "Show card" : "Hide card"}
+    >
+      {isHidden ? (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+          <line x1="1" y1="1" x2="23" y2="23"/>
+        </svg>
+      )}
+    </button>
+  );
+}
+
 function LiveIndicesCard({indices}) {
   return (
     <div className="card neutral">
@@ -139,12 +189,11 @@ function LiveIndicesCard({indices}) {
 
 /* ---------------- MOVING AVERAGES CARDS ---------------- */
 
-function NiftyPriceCard({niftyavgs}) {
+function NiftyPriceCard({niftyavgs, isHidden, onToggle}) {
   if (!niftyavgs) return null;
 
   const { price_data, trend_analysis } = niftyavgs;
 
-  // Determine overall trend from trend_analysis
   const hasBullishTrend = trend_analysis?.some(t => t.includes("bullish"));
   const hasBearishTrend = trend_analysis?.some(t => t.includes("Bearish"));
   
@@ -153,10 +202,10 @@ function NiftyPriceCard({niftyavgs}) {
   else if (hasBearishTrend) trendClass = "card bearish";
 
   return (
-    <div className={trendClass}>
+    <div className={`${trendClass} ${isHidden ? 'card-hidden' : ''}`}>
+      <ToggleButton isHidden={isHidden} onToggle={onToggle} />
       <div className="section-title">NIFTY Trend Analysis</div>
-      {/* Trend Analysis */}
-      {trend_analysis && trend_analysis.length > 0 && (
+      {!isHidden && trend_analysis && trend_analysis.length > 0 && (
         <div>
           <div className="text-sm font-semibold text-gray-300 mb-2">Trend Signals</div>
           {trend_analysis.map((trend, idx) => (
@@ -170,15 +219,16 @@ function NiftyPriceCard({niftyavgs}) {
   );
 }
 
-function SimpleMovingAveragesCard({niftyavgs}) {
+function SimpleMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
   if (!niftyavgs) return null;
 
   const { moving_averages } = niftyavgs;
 
   return (
-    <div className="card neutral">
+    <div className={`card neutral ${isHidden ? 'card-hidden' : ''}`}>
+      <ToggleButton isHidden={isHidden} onToggle={onToggle} />
       <div className="section-title">Simple Moving Averages</div>
-      {moving_averages && (
+      {!isHidden && moving_averages && (
         <div className="space-y-1">
           <KeyValue 
             label="MA 10" 
@@ -202,15 +252,16 @@ function SimpleMovingAveragesCard({niftyavgs}) {
   );
 }
 
-function ExponentialMovingAveragesCard({niftyavgs}) {
+function ExponentialMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
   if (!niftyavgs) return null;
 
   const { exponential_moving_averages } = niftyavgs;
 
   return (
-    <div className="card neutral">
+    <div className={`card neutral ${isHidden ? 'card-hidden' : ''}`}>
+      <ToggleButton isHidden={isHidden} onToggle={onToggle} />
       <div className="section-title">Exponential Moving Averages</div>
-      {exponential_moving_averages && (
+      {!isHidden && exponential_moving_averages && (
         <div className="space-y-1">
           <KeyValue 
             label="EMA 10" 
@@ -238,52 +289,99 @@ function ExponentialMovingAveragesCard({niftyavgs}) {
 
 function DashboardTab({data}) {
   const { pcr, vix, oi, rsi, indices, niftyavgs } = data;
+  
+  const [hiddenCards, setHiddenCards] = useState({
+    pcr: false,
+    vix: false,
+    oi: false,
+    rsi: false,
+    niftyPrice: false,
+    sma: false,
+    ema: false
+  });
+
+  const toggleCard = (cardName) => {
+    setHiddenCards(prev => ({
+      ...prev,
+      [cardName]: !prev[cardName]
+    }));
+  };
+
+  // Separate visible and hidden cards
+  const cards = [
+    { id: 'pcr', component: (
+      <div className={`${getCardClass(pcr?.zone)} ${hiddenCards.pcr ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.pcr} onToggle={() => toggleCard('pcr')} />
+        <div className="section-title">Overall PCR</div>
+        {!hiddenCards.pcr && (
+          <>
+            <KeyValue label="PCR" value={pcr?.pcr}/>
+            <KeyValue label="Sentiment" value={pcr?.sentiment}/>
+            <KeyValue label="Zone" value={pcr?.zone}/>
+            <div className="mt-3 text-sm break-words">{pcr?.action}</div>
+          </>
+        )}
+      </div>
+    )},
+    { id: 'vix', component: (
+      <div className={`${getCardClass(vix?.sentiment)} ${hiddenCards.vix ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.vix} onToggle={() => toggleCard('vix')} />
+        <div className="section-title">VIX</div>
+        {!hiddenCards.vix && (
+          <>
+            <KeyValue label="VIX" value={vix?.vix}/>
+            <KeyValue label="Sentiment" value={vix?.sentiment}/>
+            <div className="mt-3 text-sm break-words">{vix?.action}</div>
+          </>
+        )}
+      </div>
+    )},
+    { id: 'oi', component: (
+      <div className={`${getCardClass(oi?.zone)} ${hiddenCards.oi ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.oi} onToggle={() => toggleCard('oi')} />
+        <div className="section-title">Intraday OI Change PCR</div>
+        {!hiddenCards.oi && (
+          <>
+            <KeyValue label="Value" value={oi?.oi_change_pcr}/>
+            <KeyValue label="Sentiment" value={oi?.sentiment}/>
+            <KeyValue label="Zone" value={oi?.zone}/>
+            <div className="mt-3 text-sm break-words">{oi?.action}</div>
+          </>
+        )}
+      </div>
+    )},
+    { id: 'rsi', component: (
+      <div className={`${getCardClass(rsi?.sentiment)} ${hiddenCards.rsi ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.rsi} onToggle={() => toggleCard('rsi')} />
+        <div className="section-title">RSI</div>
+        {!hiddenCards.rsi && (
+          <>
+            <KeyValue label="RSI 15min" value={rsi?.rsi15min}/>
+            <KeyValue label="RSI 1hr" value={rsi?.rsi1hr}/>
+            <KeyValue label="Sentiment" value={rsi?.sentiment}/>
+          </>
+        )}
+      </div>
+    )},
+    { id: 'niftyPrice', component: <NiftyPriceCard niftyavgs={niftyavgs} isHidden={hiddenCards.niftyPrice} onToggle={() => toggleCard('niftyPrice')} /> },
+    { id: 'sma', component: <SimpleMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.sma} onToggle={() => toggleCard('sma')} /> },
+    { id: 'ema', component: <ExponentialMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.ema} onToggle={() => toggleCard('ema')} /> }
+  ];
+
+  const visibleCards = cards.filter(card => !hiddenCards[card.id]);
+  const collapsedCards = cards.filter(card => hiddenCards[card.id]);
 
   return (
     <div className="space-y-8">
       <LiveIndicesCard indices={indices} />
 
       <div className="grid md:grid-cols-3 gap-6">
-
-        <div className={getCardClass(pcr?.zone)}>
-          <div className="section-title">Overall PCR</div>
-          <KeyValue label="PCR" value={pcr?.pcr}/>
-          <KeyValue label="Sentiment" value={pcr?.sentiment}/>
-          <KeyValue label="Zone" value={pcr?.zone}/>
-          <div className="mt-3 text-sm break-words">{pcr?.action}</div>
-        </div>
-
-        <div className={getCardClass(vix?.sentiment)}>
-          <div className="section-title">VIX</div>
-          <KeyValue label="VIX" value={vix?.vix}/>
-          <KeyValue label="Sentiment" value={vix?.sentiment}/>
-          <div className="mt-3 text-sm break-words">{vix?.action}</div>
-        </div>
-
-        <div className={getCardClass(oi?.zone)}>
-          <div className="section-title">Intraday OI Change PCR</div>
-          <KeyValue label="Value" value={oi?.oi_change_pcr}/>
-          <KeyValue label="Sentiment" value={oi?.sentiment}/>
-          <KeyValue label="Zone" value={oi?.zone}/>
-          <div className="mt-3 text-sm break-words">{oi?.action}</div>
-        </div>
-
-        <div className={getCardClass(rsi?.sentiment)}>
-          <div className="section-title">RSI</div>
-          <KeyValue label="RSI 15min" value={rsi?.rsi15min}/>
-          <KeyValue label="RSI 1hr" value={rsi?.rsi1hr}/>
-          <KeyValue label="Sentiment" value={rsi?.sentiment}/>
-        </div>
-
-        {/* NIFTY Price and Trend Card */}
-        <NiftyPriceCard niftyavgs={niftyavgs} />
-
-        {/* Simple Moving Averages Card */}
-        <SimpleMovingAveragesCard niftyavgs={niftyavgs} />
-
-        {/* Exponential Moving Averages Card */}
-        <ExponentialMovingAveragesCard niftyavgs={niftyavgs} />
-
+        {visibleCards.map(card => (
+          <div key={card.id}>{card.component}</div>
+        ))}
+        {collapsedCards.map(card => (
+          <div key={card.id}>{card.component}</div>
+        ))}
       </div>
     </div>
   );
@@ -461,7 +559,6 @@ function OptionsEngineTab({data}) {
         </div>
       </div>
 
-      {/* ATM Options Card - MOVED ABOVE Strategy List */}
       <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} />
 
       <div className="card neutral">
