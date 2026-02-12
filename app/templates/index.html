@@ -95,6 +95,21 @@ function getCardClass(text) {
   return "card neutral";
 }
 
+function getMacdCardClass(macd) {
+  if (!macd) return "card neutral";
+
+  const macdSignal = macd?.MACD_signal;
+  const momentum = macd?.Momentum;
+  const stochasticSignal = macd?.Stochastic_signal;
+
+  if (macdSignal === "Bullish crossover" && momentum === "Positive") return "card bullish";
+  if (macdSignal === "Bearish crossover" && momentum === "Negative") return "card bearish";
+  if (stochasticSignal === "Overbought") return "card bearish";
+  if (stochasticSignal === "Oversold") return "card bullish";
+
+  return "card neutral";
+}
+
 function useAPI() {
   const [data, setData] = useState({});
 
@@ -369,7 +384,7 @@ function DashboardTab({data}) {
     { id: 'sma', component: <SimpleMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.sma} onToggle={() => toggleCard('sma')} /> },
     { id: 'ema', component: <ExponentialMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.ema} onToggle={() => toggleCard('ema')} /> },
     { id: 'macd', component: (
-      <div className={`${getCardClass(macd?.MACD_signal || macd?.Momentum)} ${hiddenCards.macd ? 'card-hidden' : ''}`}>
+      <div className={`${getMacdCardClass(macd)} ${hiddenCards.macd ? 'card-hidden' : ''}`}>
         <ToggleButton isHidden={hiddenCards.macd} onToggle={() => toggleCard('macd')} />
         <div className="section-title">MACD Indicator</div>
         {!hiddenCards.macd && (
