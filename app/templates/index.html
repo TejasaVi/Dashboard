@@ -80,6 +80,11 @@ async function getBrokerStatus() {
   return res.json();
 }
 
+async function getBrokerLivePnl() {
+  const res = await fetch("/api/brokers/pnl");
+  return res.json();
+}
+
 async function switchActiveBroker(broker) {
   const res = await fetch("/api/brokers/switch", {
     method: "POST",
@@ -297,6 +302,12 @@ function LiveIndicesCard({indices}) {
   );
 }
 
+function formatCurrency(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  return `₹${num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function PlatformStatusCard({ brokerStatus }) {
   const items = [
     { key: "zerodha", label: "Zerodha" },
@@ -325,11 +336,35 @@ function PlatformStatusCard({ brokerStatus }) {
   );
 }
 
-function LiveHeaderRow({ indices, brokerStatus }) {
+function LivePnlCard({ livePnl }) {
+  const totalPnl = Number(livePnl?.total_pnl || 0);
+  const pnlClass = totalPnl >= 0 ? "text-green-400" : "text-rose-400";
+
   return (
-    <div className="grid md:grid-cols-[2fr_1fr] gap-6 items-stretch">
+    <div className="card neutral h-full">
+      <div className="section-title mb-2 text-base">Live P&amp;L</div>
+      <div className={`text-2xl font-bold ${pnlClass}`}>{formatCurrency(totalPnl)}</div>
+      <div className="mt-2 space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-gray-400">Day MTM</span>
+          <span>{formatCurrency(livePnl?.day_m2m)}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-gray-400">Open Positions</span>
+          <span>{livePnl?.open_positions ?? 0}</span>
+        </div>
+      </div>
+      <div className="mt-3 text-[11px] text-gray-500">{livePnl?.success ? "Source: Zerodha" : (livePnl?.error || "Unavailable")}</div>
+    </div>
+  );
+}
+
+function LiveHeaderRow({ indices, brokerStatus, livePnl, showLivePnl = false }) {
+  return (
+    <div className={`grid gap-6 items-stretch ${showLivePnl ? "md:grid-cols-3" : "md:grid-cols-[2fr_1fr]"}`}>
       <LiveIndicesCard indices={indices} />
       <PlatformStatusCard brokerStatus={brokerStatus} />
+      {showLivePnl && <LivePnlCard livePnl={livePnl} />}
     </div>
   );
 }
@@ -434,7 +469,7 @@ function ExponentialMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
 
 /* ---------------- DASHBOARD ---------------- */
 
-function DashboardTab({data, brokerStatus}) {
+function DashboardTab({data, brokerStatus, livePnl}) {
   const { pcr, vix, oi, rsi, indices, niftyavgs, macd } = data;
   const hiddenCardsStorageKey = "dashboardHiddenCards";
   const defaultHiddenCards = {
@@ -551,7 +586,7 @@ function DashboardTab({data, brokerStatus}) {
 
   return (
     <div className="space-y-8">
-      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl={false} />
 
       <div className="grid md:grid-cols-3 gap-6">
         {visibleCards.map(card => (
@@ -814,7 +849,7 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
 
 /* ---------------- OPTIONS ENGINE TAB ---------------- */
 
-function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}) {
+function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled, livePnl}) {
   const { bias, indices } = data;
   const [openStrategy, setOpenStrategy] = useState(null);
   const [expiries, setExpiries] = useState([]);
@@ -863,7 +898,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}
 
   return (
     <div className="space-y-8">
-      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl />
 
       <div className={getCardClass(bias?.bias)}>
         <div className="section-title">Options Strategy Engine</div>
@@ -1162,6 +1197,7 @@ function App() {
   const [tab, setTab] = useState("brokers");
   const [selectedBrokers, setSelectedBrokers] = useState(["zerodha"]);
   const [brokerStatus, setBrokerStatus] = useState({});
+  const [livePnl, setLivePnl] = useState({});
   const failoverEnabled = false;
 
   const refreshBrokerStatus = async () => {
@@ -1171,8 +1207,18 @@ function App() {
     } catch {}
   };
 
+  const refreshLivePnl = async () => {
+    try {
+      const pnl = await getBrokerLivePnl();
+      setLivePnl(pnl);
+    } catch {}
+  };
+
   useEffect(() => {
     refreshBrokerStatus();
+    refreshLivePnl();
+    const interval = setInterval(refreshLivePnl, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -1187,8 +1233,8 @@ function App() {
       </div>
 
       {tab==="brokers" && <BrokersTab selectedBrokers={selectedBrokers} setSelectedBrokers={setSelectedBrokers} brokerStatus={brokerStatus} refreshBrokerStatus={refreshBrokerStatus} />}
-      {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} />}
-      {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} />}
+      {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
+      {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} livePnl={livePnl} />}
       {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} />}
       {tab==="fii-dii" && <FiiDiiTab />}
 

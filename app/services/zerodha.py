@@ -352,5 +352,38 @@ class ZerodhaClient:
 
         return {"success": True, "orders": orders}
 
+    def get_live_pnl_summary(self) -> Dict[str, Any]:
+        if not self._kite:
+            raise ValueError("Zerodha is not configured")
+        if not self._access_token:
+            self._load_persisted_access_token()
+        if not self._access_token:
+            raise ValueError("Please connect Zerodha first")
+
+        positions = self._kite.positions().get("net", [])
+        total_pnl = 0.0
+        day_m2m = 0.0
+        open_positions = 0
+
+        for position in positions:
+            exchange = position.get("exchange")
+            quantity = int(position.get("quantity") or 0)
+            if exchange != self._kite.EXCHANGE_NFO:
+                continue
+
+            total_pnl += float(position.get("pnl") or 0.0)
+            day_m2m += float(position.get("m2m") or 0.0)
+            if quantity != 0:
+                open_positions += 1
+
+        return {
+            "success": True,
+            "broker": "zerodha",
+            "total_pnl": round(total_pnl, 2),
+            "day_m2m": round(day_m2m, 2),
+            "open_positions": open_positions,
+            "updated_at": datetime.now(tz=ZoneInfo("Asia/Kolkata")).isoformat(),
+        }
+
 
 zerodha_client = ZerodhaClient()

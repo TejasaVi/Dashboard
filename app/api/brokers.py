@@ -24,6 +24,14 @@ def brokers_status():
     })
 
 
+@brokers_bp.route("/brokers/pnl", methods=["GET"])
+def brokers_live_pnl():
+    try:
+        return jsonify(zerodha_client.get_live_pnl_summary()), 200
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+
 @brokers_bp.route("/brokers/active", methods=["GET"])
 def active_broker():
     return jsonify({"active_broker": broker_switcher.active_broker})
