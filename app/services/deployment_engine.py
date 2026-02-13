@@ -39,6 +39,8 @@ class DeploymentPlan:
     first_buy_at: Optional[datetime] = None
     price_check_5m: Optional[float] = None
     price_check_10m: Optional[float] = None
+    trailing_peak_price: Optional[float] = None
+    trailing_stop_price: Optional[float] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     orders: List[Dict[str, Any]] = field(default_factory=list)
     events: List[str] = field(default_factory=list)
@@ -86,6 +88,18 @@ class DeploymentEngine:
             return float(zerodha_client.get_option_ltp(contract) or 0)
         except Exception:
             return 0.0
+
+    def _resolve_trailing_stop_pct(self, metadata: Dict[str, Any], fallback: float = 0.1) -> float:
+        value = metadata.get("trailing_stop_pct") if isinstance(metadata, dict) else None
+        try:
+            parsed = float(value)
+            if 0 < parsed < 1:
+                return parsed
+            if 1 <= parsed < 100:
+                return parsed / 100
+        except (TypeError, ValueError):
+            pass
+        return fallback
 
     def _serialize_plan(self, plan: DeploymentPlan) -> Dict[str, Any]:
         data = asdict(plan)
@@ -269,7 +283,7 @@ class DeploymentEngine:
             plan.status = "WAIT_10M"
             return
 
-        if plan.status in {"WAIT_10M", "ACTIVE"} and now >= ten_min_due:
+        if plan.status == "WAIT_10M" and now >= ten_min_due:
             plan.price_check_10m = current_price
             if plan.bought_lots > 0 and current_price < plan.average_buy_price:
                 self._place_lots(
@@ -283,6 +297,26 @@ class DeploymentEngine:
             else:
                 plan.events.append("10m: position retained")
                 plan.status = "ACTIVE"
+            return
+
+        if plan.status == "ACTIVE" and plan.bought_lots > 0:
+            trailing_stop_pct = self._resolve_trailing_stop_pct(plan.metadata)
+
+            if current_price > plan.average_buy_price:
+                plan.trailing_peak_price = max(plan.trailing_peak_price or 0.0, current_price)
+                plan.trailing_stop_price = plan.trailing_peak_price * (1 - trailing_stop_pct)
+
+            if plan.trailing_stop_price and current_price <= plan.trailing_stop_price:
+                self._place_lots(
+                    plan,
+                    lots=plan.bought_lots,
+                    price_hint=current_price,
+                    tx_type="SELL" if plan.request.transaction_type.upper() == "BUY" else "BUY",
+                )
+                plan.events.append(
+                    f"Trailing stop hit at {current_price:.2f} (peak {plan.trailing_peak_price:.2f}, stop {plan.trailing_stop_price:.2f})"
+                )
+                plan.status = "EXITED"
 
     def process(self, plan_id: Optional[str] = None) -> Dict[str, Any]:
         now = self._ist_now()
