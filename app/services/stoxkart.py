@@ -87,6 +87,9 @@ class StoxkartClient:
         self._access_token = token
         return self._access_token
 
+    def disconnect(self) -> None:
+        self._access_token = ""
+
     def _headers(self) -> Dict[str, str]:
         if not self._access_token:
             raise ValueError("Please connect Stoxkart first")

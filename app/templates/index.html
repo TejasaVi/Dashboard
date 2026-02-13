@@ -107,6 +107,15 @@ async function configureBrokerCredentials(payload) {
   return res.json();
 }
 
+async function disconnectBroker(broker) {
+  const res = await fetch("/api/brokers/disconnect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ broker }),
+  });
+  return res.json();
+}
+
 async function getBrokerExpiries(symbol = "NIFTY") {
   const res = await fetch(`/api/brokers/expiries?symbol=${symbol}`);
   return res.json();
@@ -843,6 +852,16 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
     setMessage(json.error || `Unable to connect ${broker}`);
   };
 
+  const disconnect = async (broker) => {
+    const res = await disconnectBroker(broker);
+    if (res.success) {
+      setMessage(`Disconnected ${broker} successfully`);
+      refreshBrokerStatus();
+      return;
+    }
+    setMessage(res.error || `Unable to disconnect ${broker}`);
+  };
+
   useEffect(() => {
     refreshBrokerStatus();
   }, []);
@@ -876,6 +895,13 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
           <div className="flex gap-2">
             <button onClick={() => configureBroker(broker)} className="px-3 py-2 rounded-md text-white bg-emerald-600 hover:bg-emerald-500 text-sm">Save Keys</button>
             <button onClick={() => connect(broker)} className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Connect</button>
+            <button
+              onClick={() => disconnect(broker)}
+              className="px-3 py-2 rounded-md text-white bg-rose-600 hover:bg-rose-500 text-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
+              disabled={!state.connected}
+            >
+              Disconnect
+            </button>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={selectedBrokers.includes(broker)} onChange={() => toggleBroker(broker)} />

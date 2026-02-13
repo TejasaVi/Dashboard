@@ -36,6 +36,27 @@ def switch_broker():
         return jsonify({"success": False, "error": str(exc)}), 400
 
 
+@brokers_bp.route("/brokers/disconnect", methods=["POST"])
+def disconnect_broker():
+    payload = request.get_json(silent=True) or {}
+    broker = (payload.get("broker") or "").lower().strip()
+
+    if broker == "zerodha":
+        zerodha_client.disconnect()
+    elif broker == "fyers":
+        fyers_client.disconnect()
+    elif broker == "stoxkart":
+        stoxkart_client.disconnect()
+    else:
+        return jsonify({"success": False, "error": "Unsupported broker"}), 400
+
+    return jsonify({
+        "success": True,
+        "broker": broker,
+        "status": order_execution_engine.broker_status().get(broker, {}),
+    })
+
+
 @brokers_bp.route("/brokers/place-order", methods=["POST"])
 def place_order_multi():
     payload = request.get_json(silent=True) or {}

@@ -64,6 +64,7 @@ Set these environment variables before running app.
 - `GET /api/brokers/active`
 - `POST /api/brokers/switch`
 - `POST /api/brokers/configure` (set API keys/secrets at runtime)
+- `POST /api/brokers/disconnect` (clear broker session / disconnect in-memory token)
 - `POST /api/brokers/place-order`
 - `POST /api/brokers/execute-strategy`
 - Send `brokers` as array, and broker-specific symbols when needed (`fyers_symbol`, `stoxkart_symbol`)

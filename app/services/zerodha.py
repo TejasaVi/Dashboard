@@ -48,6 +48,19 @@ class ZerodhaClient:
         self._kite.set_access_token(self._access_token)
         return self._access_token
 
+    def disconnect(self) -> None:
+        if self._kite and self._access_token:
+            self._kite.set_access_token(self._access_token)
+            try:
+                self._kite.invalidate_access_token()
+            except Exception:
+                # Ignore revoke failures (e.g. already expired token) and clear local state anyway.
+                pass
+
+        self._access_token = ""
+        if self._kite:
+            self._kite.set_access_token("")
+
     def profile(self) -> Dict[str, Any]:
         if not self._kite:
             raise ValueError("Zerodha is not configured")

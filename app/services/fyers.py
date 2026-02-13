@@ -59,6 +59,9 @@ class FyersClient:
         self._access_token = token
         return self._access_token
 
+    def disconnect(self) -> None:
+        self._access_token = ""
+
     def profile(self) -> Dict[str, Any]:
         if not self.is_connected:
             raise ValueError("Fyers access token not available")
