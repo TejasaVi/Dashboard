@@ -892,8 +892,13 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}
   );
 }
 
-function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, activeBroker, setActiveBroker, failoverEnabled, setFailoverEnabled }) {
+function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus }) {
   const [message, setMessage] = useState("");
+  const [expandedCards, setExpandedCards] = useState({
+    zerodha: true,
+    fyers: true,
+    stoxkart: true,
+  });
   const [credentials, setCredentials] = useState({
     zerodha: { api_key: "", api_secret: "", access_token: "" },
     fyers: { api_key: "", api_secret: "", redirect_uri: "", access_token: "" },
@@ -933,14 +938,11 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
     setMessage(res.error || `Unable to configure ${broker}`);
   };
 
-  const changeActive = async (broker) => {
-    const res = await switchActiveBroker(broker);
-    if (res.success) {
-      setActiveBroker(res.active_broker);
-      refreshBrokerStatus();
-    } else {
-      setMessage(res.error || "Unable to switch broker");
-    }
+  const toggleCard = (broker) => {
+    setExpandedCards((prev) => ({
+      ...prev,
+      [broker]: !prev[broker],
+    }));
   };
 
   const connect = async (broker) => {
@@ -972,7 +974,18 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
 
     return (
       <div className="card neutral">
-        <div className="section-title">{title}</div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="section-title !mb-0">{title}</div>
+          <button
+            onClick={() => toggleCard(broker)}
+            className="px-3 py-1 rounded-md text-xs text-white bg-gray-700 hover:bg-gray-600"
+          >
+            {expandedCards[broker] ? "Hide" : "Unhide"}
+          </button>
+        </div>
+        {!expandedCards[broker] && <div className="text-xs text-gray-400 mt-3">Credentials panel is hidden.</div>}
+        {expandedCards[broker] && (
+          <>
         <div className="space-y-2 text-sm">
           <div>Configured: <span className="font-semibold">{state.configured ? "Yes" : "No"}</span></div>
           <div>Connected: <span className="font-semibold">{state.connected ? "Yes" : "No"}</span></div>
@@ -1008,6 +1021,8 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
             Use for deploy
           </label>
         </div>
+          </>
+        )}
       </div>
     );
   };
@@ -1048,21 +1063,6 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
         />
       </div>
       {message && <div className="text-sm text-emerald-300">{message}</div>}
-      <div className="card neutral">
-        <div className="section-title">Broker Switcher & Failover</div>
-        <div className="flex items-center gap-3 text-sm mb-3">
-          <span>Active Broker:</span>
-          <select className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" value={activeBroker} onChange={(e) => changeActive(e.target.value)}>
-            <option value="zerodha">Zerodha</option>
-            <option value="fyers">Fyers</option>
-            <option value="stoxkart">Stoxkart</option>
-          </select>
-        </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={failoverEnabled} onChange={(e) => setFailoverEnabled(e.target.checked)} />
-          Enable failover trading (try next selected broker if first fails)
-        </label>
-      </div>
       <div className="text-sm text-gray-300">Selected platform(s) for order execution: {selectedBrokers.join(", ") || "None"}</div>
     </div>
   );
@@ -1117,14 +1117,12 @@ function App() {
   const [tab, setTab] = useState("brokers");
   const [selectedBrokers, setSelectedBrokers] = useState(["zerodha"]);
   const [brokerStatus, setBrokerStatus] = useState({});
-  const [activeBroker, setActiveBroker] = useState("zerodha");
-  const [failoverEnabled, setFailoverEnabled] = useState(true);
+  const failoverEnabled = false;
 
   const refreshBrokerStatus = async () => {
     try {
       const status = await getBrokerStatus();
       setBrokerStatus(status);
-      if (status?.active_broker) setActiveBroker(status.active_broker);
     } catch {}
   };
 
@@ -1143,7 +1141,7 @@ function App() {
         <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
       </div>
 
-      {tab==="brokers" && <BrokersTab selectedBrokers={selectedBrokers} setSelectedBrokers={setSelectedBrokers} brokerStatus={brokerStatus} refreshBrokerStatus={refreshBrokerStatus} activeBroker={activeBroker} setActiveBroker={setActiveBroker} failoverEnabled={failoverEnabled} setFailoverEnabled={setFailoverEnabled} />}
+      {tab==="brokers" && <BrokersTab selectedBrokers={selectedBrokers} setSelectedBrokers={setSelectedBrokers} brokerStatus={brokerStatus} refreshBrokerStatus={refreshBrokerStatus} />}
       {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} />}
       {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} />}
       {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} />}
