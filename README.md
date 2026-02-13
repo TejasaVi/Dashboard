@@ -80,6 +80,6 @@ Set these environment variables before running app.
 
 
 ## Runtime broker credential input
-- Use the **Brokers** tab to provide API keys/secrets for Zerodha, Fyers, and Stoxkart.
+- Open **/broker-setup** to provide API keys/secrets for Zerodha, Fyers, and Stoxkart.
 - Credentials are applied in-memory through `POST /api/brokers/configure`.
 - After saving keys, click **Connect** to complete OAuth/login where required.
