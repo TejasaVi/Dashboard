@@ -1,5 +1,8 @@
+import json
 import os
 from datetime import date
+from pathlib import Path
+from tempfile import gettempdir
 from typing import Any, Dict, List, Optional
 
 from kiteconnect import KiteConnect
@@ -17,15 +20,63 @@ class ZerodhaClient:
 
         if self._kite and self._access_token:
             self._kite.set_access_token(self._access_token)
+            self._persist_access_token()
+        elif self._kite:
+            self._load_persisted_access_token()
+
+    def _session_file_path(self) -> Path:
+        configured = os.getenv("ZERODHA_SESSION_FILE", "").strip()
+        if configured:
+            return Path(configured)
+        return Path(gettempdir()) / "zerodha_session.json"
+
+    def _persist_access_token(self) -> None:
+        if not self.api_key:
+            return
+        data = {"api_key": self.api_key, "access_token": self._access_token}
+        self._session_file_path().write_text(json.dumps(data))
+
+    def _load_persisted_access_token(self) -> None:
+        if self._access_token or not self._kite or not self.api_key:
+            return
+
+        path = self._session_file_path()
+        if not path.exists():
+            return
+
+        try:
+            data = json.loads(path.read_text())
+        except Exception:
+            return
+
+        if data.get("api_key") != self.api_key:
+            return
+
+        token = (data.get("access_token") or "").strip()
+        if not token:
+            return
+
+        self._access_token = token
+        self._kite.set_access_token(self._access_token)
 
     def configure(self, api_key: str, api_secret: str, access_token: Optional[str] = None) -> None:
+        prev_api_key = self.api_key
+        prev_api_secret = self.api_secret
         self.api_key = (api_key or "").strip()
         self.api_secret = (api_secret or "").strip()
-        self._access_token = (access_token or "").strip()
+
+        if access_token is not None:
+            self._access_token = access_token.strip()
+        elif self.api_key != prev_api_key or self.api_secret != prev_api_secret:
+            self._access_token = ""
+
         self._kite = KiteConnect(api_key=self.api_key) if self.api_key else None
         self._nfo_instruments = []
         if self._kite and self._access_token:
             self._kite.set_access_token(self._access_token)
+            self._persist_access_token()
+        elif self._kite:
+            self._load_persisted_access_token()
 
     @property
     def is_configured(self) -> bool:
@@ -33,6 +84,7 @@ class ZerodhaClient:
 
     @property
     def is_connected(self) -> bool:
+        self._load_persisted_access_token()
         return bool(self._access_token and self._kite)
 
     def login_url(self) -> str:
@@ -46,6 +98,7 @@ class ZerodhaClient:
         session_data = self._kite.generate_session(request_token, api_secret=self.api_secret)
         self._access_token = session_data["access_token"]
         self._kite.set_access_token(self._access_token)
+        self._persist_access_token()
         return self._access_token
 
     def disconnect(self) -> None:
@@ -60,10 +113,13 @@ class ZerodhaClient:
         self._access_token = ""
         if self._kite:
             self._kite.set_access_token("")
+        self._persist_access_token()
 
     def profile(self) -> Dict[str, Any]:
         if not self._kite:
             raise ValueError("Zerodha is not configured")
+        if not self._access_token:
+            self._load_persisted_access_token()
         if not self._access_token:
             raise ValueError("Zerodha access token not available")
         return self._kite.profile()
@@ -109,6 +165,8 @@ class ZerodhaClient:
     ) -> Dict[str, Any]:
         if not self._kite:
             raise ValueError("Zerodha is not configured")
+        if not self._access_token:
+            self._load_persisted_access_token()
         if not self._access_token:
             raise ValueError("Please connect Zerodha first")
 
