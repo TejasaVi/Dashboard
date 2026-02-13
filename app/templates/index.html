@@ -276,7 +276,7 @@ function formatPercent(value, decimals = 2) {
 }
 
 
-function LiveIndicesCard({indices}) {
+function LiveIndicesCard({ indices, connectedBrokerLabel = null }) {
   return (
     <div className="card neutral h-full">
       <div className="section-title">Live Indices</div>
@@ -297,6 +297,12 @@ function LiveIndicesCard({indices}) {
       <div className="mt-4 text-gray-500 text-sm">{indices?.timestamp}</div>
       <div className="mt-1 text-xs text-gray-400">
         NSE Capital Market: <span className={indices?.market?.isOpen ? "text-green-400" : "text-amber-400"}>{indices?.market?.status ?? "Unknown"}</span>
+        {connectedBrokerLabel && (
+          <>
+            <span className="mx-1 text-gray-500">•</span>
+            <span>Broker: <span className="text-cyan-300">{connectedBrokerLabel}</span></span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -365,8 +371,8 @@ function LiveHeaderRow({ indices, brokerStatus, livePnl, showLivePnl = false, sh
     .map(([name]) => name);
 
   const sourceBroker = livePnl?.source_broker
-    || brokerStatus?.active_broker
     || connectedBrokers[0]
+    || brokerStatus?.active_broker
     || null;
 
   const sourceLabel = sourceBroker
@@ -1130,10 +1136,15 @@ function MMITab({data, brokerStatus}) {
 
   const marketStates = indices?.marketStates || [];
   const indexSnapshot = indices?.indexSnapshot || {};
+  const connectedBrokerName = Object.entries(brokerStatus?.brokers || {})
+    .find(([, state]) => !!state?.connected)?.[0] || brokerStatus?.active_broker || null;
+  const connectedBrokerLabel = connectedBrokerName
+    ? connectedBrokerName.charAt(0).toUpperCase() + connectedBrokerName.slice(1)
+    : null;
 
   return (
     <div className="space-y-8">
-      <LiveIndicesCard indices={indices} />
+      <LiveIndicesCard indices={indices} connectedBrokerLabel={connectedBrokerLabel} />
 
       <div className={getCardClass(mmi?.zone)}>
         <div className="section-title">Market Mood Index (Investment)</div>
