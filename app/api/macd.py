@@ -1,8 +1,12 @@
 from flask import Blueprint, jsonify
 import pandas as pd
-import yfinance as yf
+
+from app.services.nse_history import fetch_nifty_ohlcv, resample_close
+from app.services.ta_compat import macd as ta_macd
+
 
 macd_bp = Blueprint("macd", __name__)
+
 
 def _stochastic_macd(df, macd_col="MACD", k_period=14, d_period=3):
     low_macd = df[macd_col].rolling(window=k_period).min()
@@ -12,8 +16,6 @@ def _stochastic_macd(df, macd_col="MACD", k_period=14, d_period=3):
     df["Stoch_%D"] = df["Stoch_%K"].rolling(window=d_period).mean()
     return df
 
-def _to_scalar(val):
-    return val.item() if hasattr(val, "item") else val
 
 def _analyze_and_suggest(df):
     if len(df) < 2:
@@ -29,13 +31,14 @@ def _analyze_and_suggest(df):
     latest = df.iloc[-1]
     prev = df.iloc[-2]
 
-    macd = _to_scalar(latest["MACD"])
-    signal = _to_scalar(latest["Signal"])
-    prev_macd = _to_scalar(prev["MACD"])
-    prev_signal = _to_scalar(prev["Signal"])
-    stoch_k = _to_scalar(latest["Stoch_%K"])
-    stoch_d = _to_scalar(latest["Stoch_%D"])
-    prev_stoch_k = _to_scalar(prev["Stoch_%K"])
+    macd = latest["MACD"]
+    signal = latest["Signal"]
+    prev_macd = prev["MACD"]
+    prev_signal = prev["Signal"]
+    stoch_k = latest["Stoch_%K"]
+    stoch_d = latest["Stoch_%D"]
+    prev_stoch_k = prev["Stoch_%K"]
+    prev_stoch_d = prev["Stoch_%D"]
 
     result = {
         "MACD_signal": "No crossover",
@@ -46,21 +49,18 @@ def _analyze_and_suggest(df):
         "Option_Strategy": "",
     }
 
-    # MACD Crossover Detection
     if pd.notna(macd) and pd.notna(signal) and pd.notna(prev_macd) and pd.notna(prev_signal):
         if macd > signal and prev_macd <= prev_signal:
             result["MACD_signal"] = "Bullish crossover"
         elif macd < signal and prev_macd >= prev_signal:
             result["MACD_signal"] = "Bearish crossover"
 
-    # Improved Stochastic Logic - Shows actual values + crossovers + relaxed thresholds
     if pd.notna(stoch_k):
-        if stoch_k > 85:  # Relaxed from 80 for MACD volatility
+        if stoch_k > 85:
             result["Stochastic_signal"] = "Overbought"
-        elif stoch_k < 15:  # Relaxed from 20
+        elif stoch_k < 15:
             result["Stochastic_signal"] = "Oversold"
         elif pd.notna(stoch_d) and pd.notna(prev_stoch_k):
-            # Add %K/%D crossover signals for neutral zone
             if stoch_k > stoch_d and prev_stoch_k <= prev_stoch_d:
                 result["Stochastic_signal"] = "Bullish %K/%D crossover"
             elif stoch_k < stoch_d and prev_stoch_k >= prev_stoch_d:
@@ -68,20 +68,15 @@ def _analyze_and_suggest(df):
         else:
             result["Stochastic_signal"] = f"Neutral ({result['Stoch_K_value']})"
 
-    # MACD Momentum
     if pd.notna(macd):
         result["Momentum"] = "Positive" if macd > 0 else "Negative"
 
-    # Enhanced Option Strategy Logic
     option_action = []
-    
-    # Primary signals
     if result["MACD_signal"] == "Bullish crossover" and result["Momentum"] == "Positive":
         option_action.append("CE Buying opportunity")
     elif result["MACD_signal"] == "Bearish crossover" and result["Momentum"] == "Negative":
         option_action.append("PE Buying opportunity")
-    
-    # Stochastic cautions
+
     if result["Stochastic_signal"] == "Overbought":
         option_action.append("Caution: CE positions overbought")
     elif result["Stochastic_signal"] == "Oversold":
@@ -90,16 +85,17 @@ def _analyze_and_suggest(df):
         option_action.append("Stochastic supports bullish bias")
     elif "Bearish %K/%D crossover" in result["Stochastic_signal"]:
         option_action.append("Stochastic supports bearish bias")
-    
+
     if not option_action:
         option_action.append("Wait for clearer signals")
 
     result["Option_Strategy"] = " | ".join(option_action)
     return result
 
+
 def get_nifty_option_signals(period="6mo", interval="1d"):
-    ticker = "^NSEI"
-    data = yf.download(ticker, period=period, interval=interval, progress=False)
+    _ = (period, interval)  # keep signature compatibility
+    data = fetch_nifty_ohlcv(limit=600)
 
     if data.empty:
         return {
@@ -108,25 +104,17 @@ def get_nifty_option_signals(period="6mo", interval="1d"):
             "Stoch_K_value": None,
             "Stoch_D_value": None,
             "Momentum": None,
-            "Option_Strategy": "No data fetched for NIFTY. Check internet or try alternative ticker.",
+            "Option_Strategy": "No data fetched for NIFTY from NSE.",
         }
 
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.droplevel(1)
+    close = resample_close(data, "15m")
+    line, signal, hist = ta_macd(close)
+    frame = pd.DataFrame({"Close": close, "MACD": line, "Signal": signal, "Histogram": hist}).dropna()
+    frame = _stochastic_macd(frame, macd_col="MACD", k_period=14, d_period=3)
 
-    # Standard MACD calculation
-    ema_short = data["Close"].ewm(span=12, adjust=False).mean()
-    ema_long = data["Close"].ewm(span=26, adjust=False).mean()
-    data["MACD"] = ema_short - ema_long
-    data["Signal"] = data["MACD"].ewm(span=9, adjust=False).mean()
-    data["Histogram"] = data["MACD"] - data["Signal"]
+    return _analyze_and_suggest(frame)
 
-    # Apply Stochastic to MACD
-    data = _stochastic_macd(data, macd_col="MACD", k_period=14, d_period=3)
-    
-    return _analyze_and_suggest(data)
 
 @macd_bp.route("/macd", methods=["GET"])
 def nifty_options_api():
-    signals = get_nifty_option_signals()
-    return jsonify(signals)
+    return jsonify(get_nifty_option_signals())

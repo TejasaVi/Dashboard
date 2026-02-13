@@ -8,6 +8,7 @@ from app.services.fyers import fyers_client
 from app.services.stoxkart import stoxkart_client
 from app.services.zerodha import zerodha_client
 from app.services.deployment_engine import DeploymentRequest, deployment_engine
+from app.services.trade_journal import trade_journal
 
 
 @dataclass
@@ -193,6 +194,14 @@ class OrderExecutionEngine:
         self.brokers = brokers
         self.switcher = switcher
 
+    def _daily_loss_breached(self) -> bool:
+        cfg = trade_journal.config()
+        limit = float(cfg.get("daily_loss_limit") or 0.0)
+        if limit <= 0:
+            return False
+        net = float(trade_journal.analytics().get("net_pnl") or 0.0)
+        return net <= -abs(limit)
+
     def broker_status(self) -> Dict[str, Dict[str, bool]]:
         return {
             name: {
@@ -208,6 +217,21 @@ class OrderExecutionEngine:
         selected_brokers: Optional[List[str]] = None,
         failover_enabled: bool = False,
     ) -> Dict[str, Any]:
+        if self._daily_loss_breached():
+            return {"success": False, "error": "Daily loss limit reached; trading blocked"}
+
+        if trade_journal.is_paper_trading():
+            paper_order = {"paper": True, "broker": "paper", "order": order.__dict__}
+            trade_journal.log_trade({
+                "symbol": f"{order.index_name}-{order.strike}-{order.option_type}",
+                "quantity": int(order.quantity),
+                "transaction_type": order.transaction_type,
+                "broker": "paper",
+                "status": "paper_filled",
+                "pnl": 0.0,
+            })
+            return {"success": True, "results": {"paper": paper_order}, "executed_by": "paper"}
+
         brokers_to_try = selected_brokers or [self.switcher.active_broker]
         if self.switcher.active_broker in brokers_to_try:
             brokers_to_try = [self.switcher.active_broker] + [b for b in brokers_to_try if b != self.switcher.active_broker]
@@ -220,7 +244,17 @@ class OrderExecutionEngine:
                 results[broker_name] = {"success": False, "error": "Unsupported broker"}
                 continue
             try:
-                results[broker_name] = {"success": True, "order": adapter.place_order(order)}
+                placed = adapter.place_order(order)
+                results[broker_name] = {"success": True, "order": placed}
+                trade_journal.log_trade({
+                    "symbol": f"{order.index_name}-{order.strike}-{order.option_type}",
+                    "quantity": int(order.quantity),
+                    "transaction_type": order.transaction_type,
+                    "broker": broker_name,
+                    "status": "filled",
+                    "raw": placed,
+                    "pnl": 0.0,
+                })
                 if failover_enabled:
                     return {"success": True, "results": results, "executed_by": broker_name}
             except Exception as exc:

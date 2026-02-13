@@ -8,6 +8,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from app.services.zerodha import zerodha_client
+from app.services.trade_journal import trade_journal
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -39,6 +40,8 @@ class DeploymentPlan:
     first_buy_at: Optional[datetime] = None
     price_check_5m: Optional[float] = None
     price_check_10m: Optional[float] = None
+    highest_price: Optional[float] = None
+    trailing_stop_price: Optional[float] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     orders: List[Dict[str, Any]] = field(default_factory=list)
     events: List[str] = field(default_factory=list)
@@ -231,6 +234,9 @@ class DeploymentEngine:
             self._place_lots(plan, lots=1, price_hint=first_price)
             plan.first_buy_price = first_price
             plan.first_buy_at = now
+            plan.highest_price = first_price
+            trail_pct = trade_journal.trailing_stop_pct() / 100.0
+            plan.trailing_stop_price = first_price * (1 - trail_pct)
             plan.status = "WAIT_5M"
             plan.events.append("First lot deployed; waiting for 5-minute checkpoint")
             return
@@ -253,6 +259,23 @@ class DeploymentEngine:
             plan.events.append(
                 f"AMO test mode: using fallback checkpoint price {current_price} because live LTP is unavailable"
             )
+
+        if plan.bought_lots > 0 and current_price > 0:
+            if plan.highest_price is None or current_price > plan.highest_price:
+                plan.highest_price = current_price
+                trail_pct = trade_journal.trailing_stop_pct() / 100.0
+                plan.trailing_stop_price = current_price * (1 - trail_pct)
+
+            if plan.status in {"WAIT_10M", "ACTIVE"} and plan.trailing_stop_price and current_price <= plan.trailing_stop_price:
+                self._place_lots(
+                    plan,
+                    lots=plan.bought_lots,
+                    price_hint=current_price,
+                    tx_type="SELL" if plan.request.transaction_type.upper() == "BUY" else "BUY",
+                )
+                plan.events.append(f"Trailing stop triggered at {current_price}")
+                plan.status = "EXITED"
+                return
 
         if plan.status == "WAIT_5M" and now >= five_min_due:
             plan.price_check_5m = current_price
