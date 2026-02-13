@@ -32,6 +32,13 @@ Set these environment variables before running app.
 - Optional: `STOXKART_API_BASE_URL`
 - Optional: `STOXKART_ACCESS_TOKEN`
 
+
+## Debug logging
+- Application debug logs are written to `logs/app_debug.log`.
+- Incoming API requests are logged with method, path, args, and payload data.
+- Outgoing API responses are logged with status and body.
+- External HTTP calls made via `requests` are logged with params/data/json and response body.
+
 ## API routes
 
 ### Zerodha

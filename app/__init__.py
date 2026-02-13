@@ -14,10 +14,14 @@ from app.api.zerodha import zerodha_bp
 from app.api.fyers import fyers_bp
 from app.api.brokers import brokers_bp
 from app.api.stoxkart import stoxkart_bp
+from app.logging_setup import configure_file_logging, patch_requests_logging
 
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    configure_file_logging(app)
+    patch_requests_logging()
 
     @app.route("/")
     def dashboard():
