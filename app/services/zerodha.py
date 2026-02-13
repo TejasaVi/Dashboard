@@ -9,6 +9,16 @@ from zoneinfo import ZoneInfo
 from kiteconnect import KiteConnect
 
 
+def _parse_expiry_date(expiry_date: str) -> date:
+    value = (expiry_date or "").strip()
+    for fmt in ("%Y-%m-%d", "%d-%b-%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError("expiry_date must be in YYYY-MM-DD, DD-Mon-YYYY, or DD-MM-YYYY format")
+
+
 class ZerodhaClient:
     """Lightweight in-memory Zerodha session manager."""
 
@@ -144,7 +154,7 @@ class ZerodhaClient:
         today = date.today()
         target_expiry = None
         if expiry_date:
-            target_expiry = datetime.strptime(expiry_date, "%Y-%m-%d").date()
+            target_expiry = _parse_expiry_date(expiry_date)
         candidates = []
         for row in self._get_instruments():
             if row.get("name") != index_name:
