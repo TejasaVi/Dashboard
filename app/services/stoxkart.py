@@ -15,6 +15,29 @@ class StoxkartClient:
         self.api_base_url = os.getenv("STOXKART_API_BASE_URL", "")
         self._access_token = os.getenv("STOXKART_ACCESS_TOKEN", "")
 
+
+    def configure(
+        self,
+        client_id: str,
+        secret_key: str,
+        redirect_uri: Optional[str] = None,
+        auth_base_url: Optional[str] = None,
+        token_url: Optional[str] = None,
+        api_base_url: Optional[str] = None,
+        access_token: Optional[str] = None,
+    ) -> None:
+        self.client_id = (client_id or "").strip()
+        self.secret_key = (secret_key or "").strip()
+        if redirect_uri is not None:
+            self.redirect_uri = redirect_uri.strip()
+        if auth_base_url is not None:
+            self.auth_base_url = auth_base_url.strip()
+        if token_url is not None:
+            self.token_url = token_url.strip()
+        if api_base_url is not None:
+            self.api_base_url = api_base_url.strip()
+        self._access_token = (access_token or "").strip()
+
     @property
     def is_configured(self) -> bool:
         return bool(self.client_id and self.secret_key and self.redirect_uri and self.auth_base_url)

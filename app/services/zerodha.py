@@ -18,6 +18,15 @@ class ZerodhaClient:
         if self._kite and self._access_token:
             self._kite.set_access_token(self._access_token)
 
+    def configure(self, api_key: str, api_secret: str, access_token: Optional[str] = None) -> None:
+        self.api_key = (api_key or "").strip()
+        self.api_secret = (api_secret or "").strip()
+        self._access_token = (access_token or "").strip()
+        self._kite = KiteConnect(api_key=self.api_key) if self.api_key else None
+        self._nfo_instruments = []
+        if self._kite and self._access_token:
+            self._kite.set_access_token(self._access_token)
+
     @property
     def is_configured(self) -> bool:
         return bool(self.api_key and self.api_secret and self._kite)

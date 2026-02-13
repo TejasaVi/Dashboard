@@ -56,6 +56,7 @@ Set these environment variables before running app.
 - `GET /api/brokers/status`
 - `GET /api/brokers/active`
 - `POST /api/brokers/switch`
+- `POST /api/brokers/configure` (set API keys/secrets at runtime)
 - `POST /api/brokers/place-order`
 - `POST /api/brokers/execute-strategy`
 - Send `brokers` as array, and broker-specific symbols when needed (`fyers_symbol`, `stoxkart_symbol`)
@@ -67,3 +68,9 @@ Set these environment variables before running app.
 - Abstract order execution engine
 - Strategy router (single, iron_condor, call_spread, put_spread, calendar)
 - Failover system for resilient execution
+
+
+## Runtime broker credential input
+- Use the **Brokers** tab to provide API keys/secrets for Zerodha, Fyers, and Stoxkart.
+- Credentials are applied in-memory through `POST /api/brokers/configure`.
+- After saving keys, click **Connect** to complete OAuth/login where required.

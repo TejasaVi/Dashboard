@@ -11,6 +11,20 @@ class FyersClient:
         self.redirect_uri = os.getenv("FYERS_REDIRECT_URI", "http://127.0.0.1:5000/api/fyers/callback")
         self._access_token = os.getenv("FYERS_ACCESS_TOKEN", "")
 
+
+    def configure(
+        self,
+        client_id: str,
+        secret_key: str,
+        redirect_uri: Optional[str] = None,
+        access_token: Optional[str] = None,
+    ) -> None:
+        self.client_id = (client_id or "").strip()
+        self.secret_key = (secret_key or "").strip()
+        if redirect_uri is not None:
+            self.redirect_uri = redirect_uri.strip()
+        self._access_token = (access_token or "").strip()
+
     @property
     def is_configured(self) -> bool:
         return bool(self.client_id and self.secret_key and self.redirect_uri)
