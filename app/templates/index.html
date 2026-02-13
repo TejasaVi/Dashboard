@@ -276,7 +276,7 @@ function formatPercent(value, decimals = 2) {
 }
 
 
-function LiveIndicesCard({ indices, connectedBrokerLabel = null }) {
+function LiveIndicesCard({ indices, connectedBrokerLabel = null, connectedPlatformLabels = [] }) {
   return (
     <div className="card neutral h-full">
       <div className="section-title">Live Indices</div>
@@ -304,6 +304,18 @@ function LiveIndicesCard({ indices, connectedBrokerLabel = null }) {
           </>
         )}
       </div>
+      {connectedPlatformLabels.length > 0 && (
+        <div className="mt-3 border-t border-gray-800 pt-3">
+          <div className="text-xs text-gray-400 mb-1">Trading Platforms</div>
+          <div className="flex flex-wrap gap-2">
+            {connectedPlatformLabels.map((label) => (
+              <span key={label} className="text-xs px-2 py-1 rounded-full border border-green-500/60 bg-green-500/10 text-green-300">
+                {label} Connected
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -320,23 +332,20 @@ function PlatformStatusCard({ brokerStatus }) {
     { key: "fyers", label: "Fyers" },
     { key: "stoxkart", label: "Stoxkart" },
   ];
+  const connectedItems = items.filter((item) => !!brokerStatus?.brokers?.[item.key]?.connected);
 
   return (
     <div className="card neutral h-full">
       <div className="section-title mb-2 text-base">Trading Platform Status</div>
       <div className="space-y-1.5">
-        {items.map((item) => {
-          const state = brokerStatus?.brokers?.[item.key] || {};
-          const connected = !!state.connected;
-          return (
-            <div key={item.key} className="flex items-center justify-between text-xs">
-              <span>{item.label}</span>
-              <span className={`font-semibold ${connected ? "text-green-400" : "text-rose-400"}`}>
-                {connected ? "Connected" : "Not Connected"}
-              </span>
-            </div>
-          );
-        })}
+        {connectedItems.length === 0 ? (
+          <div className="text-xs text-gray-400">No connected platforms</div>
+        ) : connectedItems.map((item) => (
+          <div key={item.key} className="flex items-center justify-between text-xs">
+            <span>{item.label}</span>
+            <span className="font-semibold text-green-400">Connected</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -360,12 +369,12 @@ function LivePnlCard({ livePnl, sourceLabel }) {
           <span>{livePnl?.open_positions ?? 0}</span>
         </div>
       </div>
-      <div className="mt-3 text-[11px] text-gray-500">{livePnl?.success ? `Source: ${sourceLabel || "Connected Broker"}` : (livePnl?.error || "Unavailable")}</div>
+      <div className="mt-3 text-[11px] text-gray-500">{livePnl?.success ? `Broker: ${sourceLabel || "Connected Broker"}` : (livePnl?.error || "Unavailable")}</div>
     </div>
   );
 }
 
-function LiveHeaderRow({ indices, brokerStatus, livePnl, showLivePnl = false, showPlatformStatus = true }) {
+function LiveHeaderRow({ indices, brokerStatus, livePnl, showLivePnl = false, showPlatformStatus = true, mergePlatformStatusIntoIndices = false }) {
   const connectedBrokers = Object.entries(brokerStatus?.brokers || {})
     .filter(([, state]) => !!state?.connected)
     .map(([name]) => name);
@@ -379,14 +388,17 @@ function LiveHeaderRow({ indices, brokerStatus, livePnl, showLivePnl = false, sh
     ? sourceBroker.charAt(0).toUpperCase() + sourceBroker.slice(1)
     : null;
 
+  const connectedPlatformLabels = connectedBrokers.map((name) => name.charAt(0).toUpperCase() + name.slice(1));
+  const shouldShowPlatformCard = showPlatformStatus && !mergePlatformStatusIntoIndices;
+
   const gridClass = showLivePnl
-    ? (showPlatformStatus ? "md:grid-cols-3" : "md:grid-cols-[2fr_1fr]")
+    ? (shouldShowPlatformCard ? "md:grid-cols-3" : "md:grid-cols-[2fr_1fr]")
     : "md:grid-cols-[2fr_1fr]";
 
   return (
     <div className={`grid gap-6 items-stretch ${gridClass}`}>
-      <LiveIndicesCard indices={indices} />
-      {showPlatformStatus && <PlatformStatusCard brokerStatus={brokerStatus} />}
+      <LiveIndicesCard indices={indices} connectedPlatformLabels={mergePlatformStatusIntoIndices ? connectedPlatformLabels : []} />
+      {shouldShowPlatformCard && <PlatformStatusCard brokerStatus={brokerStatus} />}
       {showLivePnl && <LivePnlCard livePnl={livePnl} sourceLabel={sourceLabel} />}
     </div>
   );
@@ -924,7 +936,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled,
 
   return (
     <div className="space-y-8">
-      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
 
       <div className={getCardClass(bias?.bias)}>
         <div className="section-title">Options Strategy Engine</div>
@@ -964,7 +976,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled,
   );
 }
 
-function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, onSkip, onContinue }) {
+function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, onSkip }) {
   const [message, setMessage] = useState("");
   const [selectedBroker, setSelectedBroker] = useState("zerodha");
   const [credentials, setCredentials] = useState({
@@ -1069,6 +1081,18 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
     ? connectedBrokerName.charAt(0).toUpperCase() + connectedBrokerName.slice(1)
     : null;
 
+  if (connectedBrokerLabel) {
+    return (
+      <div className="space-y-6 max-w-3xl mx-auto">
+        <div className="card neutral">
+          <div className="rounded-md border border-green-500/70 bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+            CONNECTED TO {connectedBrokerLabel.toUpperCase()}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="card neutral">
@@ -1090,12 +1114,6 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
           <div>Configured: <span className="font-semibold">{activeState.configured ? "Yes" : "No"}</span></div>
           <div>Connected: <span className="font-semibold">{activeState.connected ? "Yes" : "No"}</span></div>
         </div>
-
-        {connectedBrokerLabel && (
-          <div className="mt-4 rounded-md border border-green-500/70 bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
-            CONNECTED TO {connectedBrokerLabel.toUpperCase()}
-          </div>
-        )}
 
         <div className="mt-4 space-y-2">
           {activeMeta.fields.map((field) => (
@@ -1131,11 +1149,7 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
         </div>
 
         <div className="mt-4 flex gap-3 justify-end">
-          {connectedBrokerLabel ? (
-            <button onClick={onContinue} className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Continue</button>
-          ) : (
-            <button onClick={onSkip} className="px-3 py-2 rounded-md text-white bg-gray-700 hover:bg-gray-600 text-sm">Skip</button>
-          )}
+          <button onClick={onSkip} className="px-3 py-2 rounded-md text-white bg-gray-700 hover:bg-gray-600 text-sm">Skip</button>
         </div>
       </div>
       {message && <div className="text-sm text-emerald-300">{message}</div>}
@@ -1281,9 +1295,15 @@ function App() {
   useEffect(() => {
     if (!isBrokerSetupPage) return;
     const hasConnectedBroker = Object.values(brokerStatus?.brokers || {}).some((status) => status?.connected);
-    if (hasConnectedBroker) {
-      finishBrokerSetup();
+    if (!hasConnectedBroker) {
+      return;
     }
+
+    const timeout = setTimeout(() => {
+      finishBrokerSetup();
+    }, 2000);
+
+    return () => clearTimeout(timeout);
   }, [brokerStatus, isBrokerSetupPage]);
 
   return (
@@ -1295,7 +1315,6 @@ function App() {
           brokerStatus={brokerStatus}
           refreshBrokerStatus={refreshBrokerStatus}
           onSkip={finishBrokerSetup}
-          onContinue={finishBrokerSetup}
         />
       ) : (
         <>
