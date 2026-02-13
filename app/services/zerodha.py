@@ -161,7 +161,7 @@ class ZerodhaClient:
         option_type: str,
         quantity: int,
         transaction_type: str = "BUY",
-        product: str = "MIS",
+        product: str = "CNC",
     ) -> Dict[str, Any]:
         if not self._kite:
             raise ValueError("Zerodha is not configured")
@@ -173,7 +173,7 @@ class ZerodhaClient:
         contract = self._pick_option(index_name=index_name, strike=strike, option_type=option_type)
 
         order_id = self._kite.place_order(
-            variety=self._kite.VARIETY_REGULAR,
+            variety=self._kite.VARIETY_AMO,
             exchange=self._kite.EXCHANGE_NFO,
             tradingsymbol=contract["tradingsymbol"],
             transaction_type=(
@@ -183,7 +183,7 @@ class ZerodhaClient:
             ),
             quantity=int(quantity),
             order_type=self._kite.ORDER_TYPE_MARKET,
-            product=self._kite.PRODUCT_MIS if product == "MIS" else self._kite.PRODUCT_NRML,
+            product=self._kite.PRODUCT_CNC,
         )
 
         return {
