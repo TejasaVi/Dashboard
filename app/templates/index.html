@@ -144,9 +144,34 @@ async function disconnectBroker(broker) {
   return res.json();
 }
 
+const brokerExpiriesCache = {};
+
 async function getBrokerExpiries(symbol = "NIFTY") {
-  const res = await fetch(`/api/brokers/expiries?symbol=${symbol}`);
-  return res.json();
+  const cacheKey = String(symbol || "NIFTY").toUpperCase();
+  const cachedResponse = brokerExpiriesCache[cacheKey];
+
+  if (cachedResponse?.data) {
+    return cachedResponse.data;
+  }
+
+  if (cachedResponse?.promise) {
+    return cachedResponse.promise;
+  }
+
+  const requestPromise = fetch(`/api/brokers/expiries?symbol=${cacheKey}`)
+    .then((res) => res.json())
+    .then((data) => {
+      brokerExpiriesCache[cacheKey] = { data };
+      return data;
+    })
+    .catch((error) => {
+      delete brokerExpiriesCache[cacheKey];
+      throw error;
+    });
+
+  brokerExpiriesCache[cacheKey] = { promise: requestPromise };
+
+  return requestPromise;
 }
 
 const endpoints = {
@@ -621,7 +646,7 @@ function DashboardTab({data, brokerStatus, livePnl}) {
 
   return (
     <div className="space-y-8">
-      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl={false} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
 
       <div className="grid md:grid-cols-3 gap-6">
         {visibleCards.map(card => (
@@ -1160,21 +1185,15 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
 
 /* ---------------- MMI ---------------- */
 
-function MMITab({data, brokerStatus}) {
+function MMITab({data, brokerStatus, livePnl}) {
   const { mmi, indices } = data;
   if (!mmi) return null;
 
   const marketStates = indices?.marketStates || [];
   const indexSnapshot = indices?.indexSnapshot || {};
-  const connectedBrokerName = Object.entries(brokerStatus?.brokers || {})
-    .find(([, state]) => !!state?.connected)?.[0] || brokerStatus?.active_broker || null;
-  const connectedBrokerLabel = connectedBrokerName
-    ? connectedBrokerName.charAt(0).toUpperCase() + connectedBrokerName.slice(1)
-    : null;
-
   return (
     <div className="space-y-8">
-      <LiveIndicesCard indices={indices} connectedBrokerLabel={connectedBrokerLabel} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
 
       <div className={getCardClass(mmi?.zone)}>
         <div className="section-title">Market Mood Index (Investment)</div>
@@ -1233,12 +1252,18 @@ function MMITab({data, brokerStatus}) {
   );
 }
 
-function FiiDiiTab() {
+function FiiDiiTab({ data, brokerStatus, livePnl }) {
+  const indices = data?.indices;
+
   return (
-    <div className="bg-black border border-gray-800 rounded-xl min-h-[65vh] flex items-center justify-center">
-      <div className="text-center px-6">
-        <div className="text-xl font-semibold text-gray-200">FII DII Data</div>
-        <div className="text-sm text-gray-500 mt-2">Data view coming soon.</div>
+    <div className="space-y-8">
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
+
+      <div className="bg-black border border-gray-800 rounded-xl min-h-[65vh] flex items-center justify-center">
+        <div className="text-center px-6">
+          <div className="text-xl font-semibold text-gray-200">FII DII Data</div>
+          <div className="text-sm text-gray-500 mt-2">Data view coming soon.</div>
+        </div>
       </div>
     </div>
   );
@@ -1330,8 +1355,8 @@ function App() {
 
           {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
           {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} livePnl={livePnl} onTradeActivity={registerTradeActivity} />}
-          {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} />}
-          {tab==="fii-dii" && <FiiDiiTab />}
+          {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
+          {tab==="fii-dii" && <FiiDiiTab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
         </>
       )}
 
