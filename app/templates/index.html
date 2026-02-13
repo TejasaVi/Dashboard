@@ -1001,7 +1001,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled,
   );
 }
 
-function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, onSkip }) {
+function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, onSkip, onConnectedDisconnect }) {
   const [message, setMessage] = useState("");
   const [selectedBroker, setSelectedBroker] = useState("zerodha");
   const [credentials, setCredentials] = useState({
@@ -1052,11 +1052,14 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
     setMessage(json.error || `Unable to connect ${broker}`);
   };
 
-  const disconnect = async (broker) => {
+  const disconnect = async (broker, redirectToLanding = false) => {
     const res = await disconnectBroker(broker);
     if (res.success) {
       setMessage(`Disconnected ${broker} successfully`);
       refreshBrokerStatus();
+      if (redirectToLanding) {
+        onConnectedDisconnect();
+      }
       return;
     }
     setMessage(res.error || `Unable to disconnect ${broker}`);
@@ -1112,6 +1115,14 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
         <div className="card neutral">
           <div className="rounded-md border border-green-500/70 bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
             CONNECTED TO {connectedBrokerLabel.toUpperCase()}
+          </div>
+          <div className="mt-4">
+            <button
+              onClick={() => disconnect(connectedBrokerName, true)}
+              className="px-3 py-2 rounded-md text-white bg-rose-600 hover:bg-rose-500 text-sm"
+            >
+              Disconnect
+            </button>
           </div>
         </div>
       </div>
@@ -1317,20 +1328,6 @@ function App() {
     return () => clearInterval(interval);
   }, [hasTradeActivity]);
 
-  useEffect(() => {
-    if (!isBrokerSetupPage) return;
-    const hasConnectedBroker = Object.values(brokerStatus?.brokers || {}).some((status) => status?.connected);
-    if (!hasConnectedBroker) {
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      finishBrokerSetup();
-    }, 2000);
-
-    return () => clearTimeout(timeout);
-  }, [brokerStatus, isBrokerSetupPage]);
-
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {isBrokerSetupPage ? (
@@ -1340,6 +1337,7 @@ function App() {
           brokerStatus={brokerStatus}
           refreshBrokerStatus={refreshBrokerStatus}
           onSkip={finishBrokerSetup}
+          onConnectedDisconnect={finishBrokerSetup}
         />
       ) : (
         <>
