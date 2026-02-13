@@ -36,6 +36,7 @@ def _analyze_and_suggest(df):
     stoch_k = _to_scalar(latest["Stoch_%K"])
     stoch_d = _to_scalar(latest["Stoch_%D"])
     prev_stoch_k = _to_scalar(prev["Stoch_%K"])
+    prev_stoch_d = _to_scalar(prev["Stoch_%D"])
 
     result = {
         "MACD_signal": "No crossover",
@@ -59,7 +60,7 @@ def _analyze_and_suggest(df):
             result["Stochastic_signal"] = "Overbought"
         elif stoch_k < 15:  # Relaxed from 20
             result["Stochastic_signal"] = "Oversold"
-        elif pd.notna(stoch_d) and pd.notna(prev_stoch_k):
+        elif pd.notna(stoch_d) and pd.notna(prev_stoch_k) and pd.notna(prev_stoch_d):
             # Add %K/%D crossover signals for neutral zone
             if stoch_k > stoch_d and prev_stoch_k <= prev_stoch_d:
                 result["Stochastic_signal"] = "Bullish %K/%D crossover"
