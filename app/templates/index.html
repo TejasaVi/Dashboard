@@ -369,7 +369,7 @@ function LivePnlCard({ livePnl, sourceLabel }) {
           <span>{livePnl?.open_positions ?? 0}</span>
         </div>
       </div>
-      <div className="mt-3 text-[11px] text-gray-500">{livePnl?.success ? `Source: ${sourceLabel || "Connected Broker"}` : (livePnl?.error || "Unavailable")}</div>
+      <div className="mt-3 text-[11px] text-gray-500">{livePnl?.success ? `Broker: ${sourceLabel || "Connected Broker"}` : (livePnl?.error || "Unavailable")}</div>
     </div>
   );
 }
