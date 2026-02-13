@@ -10,6 +10,10 @@ from app.api.market_bias import marketbias_bp
 from app.api.oi_change import oi_change_pcr_bp
 from app.api.nifty_mas import nifty_avgs_bp
 from app.api.macd import macd_bp
+from app.api.zerodha import zerodha_bp
+from app.api.fyers import fyers_bp
+from app.api.brokers import brokers_bp
+from app.api.stoxkart import stoxkart_bp
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -29,4 +33,8 @@ def create_app(config_class=Config):
     app.register_blueprint(oi_change_pcr_bp, url_prefix="/api")
     app.register_blueprint(nifty_avgs_bp, url_prefix="/api")
     app.register_blueprint(macd_bp, url_prefix="/api")
+    app.register_blueprint(zerodha_bp, url_prefix="/api")
+    app.register_blueprint(fyers_bp, url_prefix="/api")
+    app.register_blueprint(brokers_bp, url_prefix="/api")
+    app.register_blueprint(stoxkart_bp, url_prefix="/api")
     return app
