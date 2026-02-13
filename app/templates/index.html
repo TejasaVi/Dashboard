@@ -1063,6 +1063,11 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
   const activeMeta = brokerMeta[selectedBroker];
   const activeState = brokerStatus?.brokers?.[selectedBroker] || {};
   const brokerCreds = credentials[selectedBroker] || {};
+  const hasConnectedBroker = Object.entries(brokerStatus?.brokers || {}).find(([, state]) => !!state?.connected);
+  const connectedBrokerName = hasConnectedBroker?.[0] || null;
+  const connectedBrokerLabel = connectedBrokerName
+    ? connectedBrokerName.charAt(0).toUpperCase() + connectedBrokerName.slice(1)
+    : null;
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
@@ -1086,6 +1091,12 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
           <div>Connected: <span className="font-semibold">{activeState.connected ? "Yes" : "No"}</span></div>
         </div>
 
+        {connectedBrokerLabel && (
+          <div className="mt-4 rounded-md border border-green-500/70 bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+            CONNECTED TO {connectedBrokerLabel.toUpperCase()}
+          </div>
+        )}
+
         <div className="mt-4 space-y-2">
           {activeMeta.fields.map((field) => (
             <input
@@ -1102,7 +1113,9 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
         <div className="flex items-center justify-between mt-4 gap-2 flex-wrap">
           <div className="flex gap-2 flex-wrap">
             <button onClick={() => configureBroker(selectedBroker)} className="px-3 py-2 rounded-md text-white bg-emerald-600 hover:bg-emerald-500 text-sm">Save Keys</button>
-            <button onClick={() => connect(selectedBroker)} className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Connect</button>
+            {!activeState.connected && (
+              <button onClick={() => connect(selectedBroker)} className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Connect</button>
+            )}
             <button
               onClick={() => disconnect(selectedBroker)}
               className="px-3 py-2 rounded-md text-white bg-rose-600 hover:bg-rose-500 text-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
@@ -1118,8 +1131,11 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
         </div>
 
         <div className="mt-4 flex gap-3 justify-end">
-          <button onClick={onSkip} className="px-3 py-2 rounded-md text-white bg-gray-700 hover:bg-gray-600 text-sm">Skip</button>
-          <button onClick={onContinue} className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Continue</button>
+          {connectedBrokerLabel ? (
+            <button onClick={onContinue} className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Continue</button>
+          ) : (
+            <button onClick={onSkip} className="px-3 py-2 rounded-md text-white bg-gray-700 hover:bg-gray-600 text-sm">Skip</button>
+          )}
         </div>
       </div>
       {message && <div className="text-sm text-emerald-300">{message}</div>}
