@@ -377,22 +377,37 @@ function PlatformStatusCard({ brokerStatus }) {
 }
 
 function LivePnlCard({ livePnl, sourceLabel }) {
+  const [showPnlDetails, setShowPnlDetails] = useState(true);
   const totalPnl = Number(livePnl?.total_pnl || 0);
   const pnlClass = totalPnl >= 0 ? "text-green-400" : "text-rose-400";
   const brokerLabel = sourceLabel || "Not connected";
+  const maskedValue = "*****";
 
   return (
     <div className="card neutral h-full">
-      <div className="section-title mb-2 text-base">Live P&amp;L</div>
-      <div className={`text-2xl font-bold ${pnlClass}`}>{formatCurrency(totalPnl)}</div>
+      <div className="mb-2 flex items-center justify-between">
+        <div className="section-title text-base">Live P&amp;L</div>
+        <button
+          type="button"
+          onClick={() => setShowPnlDetails((prev) => !prev)}
+          className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-800"
+          aria-label={showPnlDetails ? "Hide P&L details" : "Show P&L details"}
+          title={showPnlDetails ? "Hide P&L details" : "Show P&L details"}
+        >
+          {showPnlDetails ? "👁" : "🙈"}
+        </button>
+      </div>
+      <div className={`text-2xl font-bold ${showPnlDetails ? pnlClass : "text-gray-300"}`}>
+        {showPnlDetails ? formatCurrency(totalPnl) : maskedValue}
+      </div>
       <div className="mt-2 space-y-1">
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-400">Day MTM</span>
-          <span>{formatCurrency(livePnl?.day_m2m)}</span>
+          <span>{showPnlDetails ? formatCurrency(livePnl?.day_m2m) : maskedValue}</span>
         </div>
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-400">Open Positions</span>
-          <span>{livePnl?.open_positions ?? 0}</span>
+          <span>{showPnlDetails ? (livePnl?.open_positions ?? 0) : maskedValue}</span>
         </div>
       </div>
       <div className="mt-3 text-[11px] text-gray-500">Broker: {brokerLabel}</div>
@@ -1108,6 +1123,18 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
   const connectedBrokerLabel = connectedBrokerName
     ? connectedBrokerName.charAt(0).toUpperCase() + connectedBrokerName.slice(1)
     : null;
+
+  useEffect(() => {
+    if (!connectedBrokerName) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      onSkip();
+    }, 3000);
+
+    return () => clearTimeout(timeout);
+  }, [connectedBrokerName, onSkip]);
 
   if (connectedBrokerLabel) {
     return (
