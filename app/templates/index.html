@@ -1261,6 +1261,8 @@ function App() {
     getRiskConfig().then((r) => setRiskConfig(r.config || riskConfig));
   }, []);
 
+  const mergedData = { ...data, analytics };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
 
@@ -1275,8 +1277,8 @@ function App() {
       </div>
 
       {tab==="brokers" && <BrokersTab selectedBrokers={selectedBrokers} setSelectedBrokers={setSelectedBrokers} brokerStatus={brokerStatus} refreshBrokerStatus={refreshBrokerStatus} activeBroker={activeBroker} setActiveBroker={setActiveBroker} failoverEnabled={failoverEnabled} setFailoverEnabled={setFailoverEnabled} />}
-      {tab==="dashboard" && <DashboardTab data={{...data, analytics}} loading={loading} brokerStatus={brokerStatus} />}
-      {tab==="options" && <OptionsEngineTab data={{...data, analytics}} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} />}
+      {tab==="dashboard" && <DashboardTab data={mergedData} loading={loading} brokerStatus={brokerStatus} />}
+      {tab==="options" && <OptionsEngineTab data={mergedData} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} />}
       {tab==="mood" && <MarketMoodTab data={data} />}
       {tab==="analytics" && <TradeAnalyticsTab analytics={analytics} trades={recentTrades} />}
       {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} />}
