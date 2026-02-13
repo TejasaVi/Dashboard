@@ -964,7 +964,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled,
   );
 }
 
-function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, onSkip, onContinue }) {
+function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, onSkip }) {
   const [message, setMessage] = useState("");
   const [selectedBroker, setSelectedBroker] = useState("zerodha");
   const [credentials, setCredentials] = useState({
@@ -1069,6 +1069,18 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
     ? connectedBrokerName.charAt(0).toUpperCase() + connectedBrokerName.slice(1)
     : null;
 
+  if (connectedBrokerLabel) {
+    return (
+      <div className="space-y-6 max-w-3xl mx-auto">
+        <div className="card neutral">
+          <div className="rounded-md border border-green-500/70 bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+            CONNECTED TO {connectedBrokerLabel.toUpperCase()}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="card neutral">
@@ -1090,12 +1102,6 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
           <div>Configured: <span className="font-semibold">{activeState.configured ? "Yes" : "No"}</span></div>
           <div>Connected: <span className="font-semibold">{activeState.connected ? "Yes" : "No"}</span></div>
         </div>
-
-        {connectedBrokerLabel && (
-          <div className="mt-4 rounded-md border border-green-500/70 bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
-            CONNECTED TO {connectedBrokerLabel.toUpperCase()}
-          </div>
-        )}
 
         <div className="mt-4 space-y-2">
           {activeMeta.fields.map((field) => (
@@ -1131,11 +1137,7 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
         </div>
 
         <div className="mt-4 flex gap-3 justify-end">
-          {connectedBrokerLabel ? (
-            <button onClick={onContinue} className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Continue</button>
-          ) : (
-            <button onClick={onSkip} className="px-3 py-2 rounded-md text-white bg-gray-700 hover:bg-gray-600 text-sm">Skip</button>
-          )}
+          <button onClick={onSkip} className="px-3 py-2 rounded-md text-white bg-gray-700 hover:bg-gray-600 text-sm">Skip</button>
         </div>
       </div>
       {message && <div className="text-sm text-emerald-300">{message}</div>}
@@ -1281,9 +1283,15 @@ function App() {
   useEffect(() => {
     if (!isBrokerSetupPage) return;
     const hasConnectedBroker = Object.values(brokerStatus?.brokers || {}).some((status) => status?.connected);
-    if (hasConnectedBroker) {
-      finishBrokerSetup();
+    if (!hasConnectedBroker) {
+      return;
     }
+
+    const timeout = setTimeout(() => {
+      finishBrokerSetup();
+    }, 2000);
+
+    return () => clearTimeout(timeout);
   }, [brokerStatus, isBrokerSetupPage]);
 
   return (
@@ -1295,7 +1303,6 @@ function App() {
           brokerStatus={brokerStatus}
           refreshBrokerStatus={refreshBrokerStatus}
           onSkip={finishBrokerSetup}
-          onContinue={finishBrokerSetup}
         />
       ) : (
         <>
