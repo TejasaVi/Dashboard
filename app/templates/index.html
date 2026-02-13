@@ -2,487 +2,721 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Market Signals Dashboard</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Advanced Market Dashboard</title>
+
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
 
 <style>
-body { font-family: Arial, sans-serif; background:#0f172a; color:#e5e7eb; margin:0; padding:20px; }
-h1 { text-align:center; margin-bottom:25px; }
+body { background:#0f172a; color:#e2e8f0; }
+.card { border-radius:14px; padding:20px; border:1px solid #1f2937; transition:0.3s; position: relative; }
+.section-title { font-size:18px; font-weight:600; margin-bottom:10px; }
+.tab { cursor:pointer; padding:12px 20px; }
+.tab-active { border-bottom:2px solid #6366f1; }
 
-.tabs { display:flex; gap:10px; margin-bottom:20px; }
-.tab { cursor:pointer; padding:10px 15px; background:#111827; border-radius:8px; }
-.tab.active { background:#374151; }
-.tabcontent { display:none; }
-.tabcontent.active { display:block; }
+.bullish { background:rgba(16,185,129,0.08); border-color:#10b981; }
+.bearish { background:rgba(244,63,94,0.08); border-color:#f43f5e; }
+.neutral { background:rgba(99,102,241,0.08); border-color:#6366f1; }
+.warning { background:rgba(245,158,11,0.08); border-color:#f59e0b; }
 
-.dashboard { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap:20px; }
-
-.card { position:relative; background:#111827; border-radius:12px; padding:20px; box-shadow:0 4px 12px rgba(0,0,0,0.4); transition:0.3s; overflow:hidden; }
-.card h2 { margin-top:0; font-size:18px; border-bottom:1px solid #374151; padding-bottom:8px; }
-
-.row { 
-    display:flex; 
-    justify-content:space-between; 
-    margin:5px 0; 
-    border-bottom: 1px solid #1f2937; 
-    padding-bottom: 4px; 
-}
-.row:last-child { border-bottom: none; }
-.label { color:#9ca3af; }
-.value { font-weight:bold; }
-
-.gradient-bar {
-    position: relative;
-    height: 6px;
-    width: 100%;
-    border-radius: 0 0 12px 12px;
-    background: linear-gradient(to right, #ff0000, #f87171, #facc15, #22c55e, #00ff80);
-    overflow: hidden;
-    margin-top: 10px;
+.glow-green {
+  animation: glow 1.5s ease forwards;
 }
 
-.gradient-fill {
-    position: absolute;
-    height: 100%;
-    width: 50%;
-    border-radius: 0 0 12px 12px;
-    background: rgba(255,255,255,0.2);
-    transition: width 0.5s;
+@keyframes glow {
+  0% { background-color: #10b981; box-shadow: 0 0 5px #10b981; }
+  50% { background-color: #22c55e; box-shadow: 0 0 15px #22c55e; }
+  100% { background-color: #6366f1; box-shadow: none; }
 }
 
-.vertical-indicator {
-    position: absolute;
-    top: 0;
-    width: 2px;
-    height: 100%;
-    background: #000;
-    transition: left 0.5s;
+.toggle-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid #6366f1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  z-index: 10;
 }
 
-.value.bullish { color: #22c55e; font-weight:bold; }
-.value.strong-bullish { color: #00ff80; font-weight:bold; }
-.value.neutral { color: #facc15; font-weight:bold; }
-.value.bearish { color: #f87171; font-weight:bold; }
-.value.strong-bearish { color: #ff0000; font-weight:bold; }
-
-.warning-card {
-    background: linear-gradient(135deg, #1e1b4b 0%, #2d1b69 100%);
-    border: 1px solid #ef4444;
-    animation: pulse-warning 2s infinite;
+.toggle-btn:hover {
+  background: rgba(99, 102, 241, 0.3);
+  transform: scale(1.05);
 }
 
-@keyframes pulse-warning {
-    0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.3); }
-    50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+.card-hidden {
+  opacity: 0.4;
+  height: 60px;
+  overflow: hidden;
 }
-
-.warning-list {
-    margin-top: 10px;
-    padding: 10px;
-    background: rgba(239, 68, 68, 0.1);
-    border-radius: 6px;
-    border-left: 3px solid #ef4444;
-}
-
-.warning-item {
-    color: #fca5a5;
-    font-size: 14px;
-    margin: 4px 0;
-    padding-left: 8px;
-}
-
-.footer { text-align:center; margin-top:25px; font-size:13px; color:#9ca3af; }
 </style>
 </head>
+
 <body>
+<div id="root"></div>
 
-<h1>📊 Market Signals Dashboard</h1>
+<script type="text/babel">
 
-<div class="tabs">
-    <div class="tab active" data-tab="indicators">Indicators</div>
-    <div class="tab" data-tab="marketbias">Market Bias</div>
-</div>
+const { useState, useEffect } = React;
 
-<div id="indicators" class="tabcontent active">
-    <div class="dashboard">
+const endpoints = {
+  pcr: "/api/pcr",
+  vix: "/api/vix",
+  indices: "/api/indices",
+  oi: "/api/oi-change",
+  mmi: "/api/mmi",
+  rsi: "/api/rsi",
+  bias: "/api/marketbias",
+  niftyavgs: "/api/niftyavgs",
+  macd: "/api/macd"
+};
 
-        <!-- INDICES -->
-        <div class="card" id="cardIndices" data-sentiment="0">
-            <h2>Index Spot Values</h2>
-            <div class="row"><span class="label">NIFTY 50</span><span id="nifty50" class="value">--</span></div>
-            <div class="row"><span class="label">BANK NIFTY</span><span id="banknifty" class="value">--</span></div>
-            <div class="row"><span class="label">SENSEX</span><span id="sensex" class="value">--</span></div>
-            <div class="gradient-bar">
-                <div class="gradient-fill"></div>
-                <div class="vertical-indicator" id="cardIndicesIndicator"></div>
-            </div>
-        </div>
-
-        <!-- VIX -->
-        <div class="card" id="cardVIX" data-sentiment="0">
-            <h2>VIX</h2>
-            <div class="row"><span class="label">Value</span><span id="vix" class="value">--</span></div>
-            <div class="row"><span class="label">Sentiment</span><span id="vixSentiment" class="value">--</span></div>
-            <div class="row"><span class="label">Action</span><span id="vixAction" class="value">--</span></div>
-            <div class="gradient-bar">
-                <div class="gradient-fill"></div>
-                <div class="vertical-indicator" id="cardVIXIndicator"></div>
-            </div>
-        </div>
-
-        <!-- PCR -->
-        <div class="card" id="cardPCR" data-sentiment="0">
-            <h2>PCR</h2>
-            <div class="row"><span class="label">PCR</span><span id="pcr" class="value">--</span></div>
-            <div class="row"><span class="label">Sentiment</span><span id="pcrSentiment" class="value">--</span></div>
-            <div class="row"><span class="label">Action</span><span id="pcrAction" class="value">--</span></div>
-            <div class="gradient-bar">
-                <div class="gradient-fill"></div>
-                <div class="vertical-indicator" id="cardPCRIndicator"></div>
-            </div>
-        </div>
-
-		<!-- OI CHANGE PCR -->
-		<div class="card" id="cardOIChangePCR" data-sentiment="0">
-			<h2>OI Change PCR</h2>
-				<div class="row"><span class="label">PCR</span><span id="oiChangePcr" class="value">--</span></div>
-				<div class="row"><span class="label">Sentiment</span><span id="oiChangePcrSentiment" class="value">--</span></div>
-				<div class="row"><span class="label">Action</span><span id="oiChangePcrAction" class="value">--</span></div>
-				<div class="gradient-bar">
-					<div class="gradient-fill"></div>
-					<div class="vertical-indicator" id="cardOIChangePCRIndicator"></div>
-				</div>
-		</div>
-        <!-- RSI -->
-        <div class="card" id="cardRSI" data-sentiment="0">
-            <h2>RSI</h2>
-            <div class="row"><span class="label">RSI (15m)</span><span id="rsi15" class="value">--</span></div>
-            <div class="row"><span class="label">RSI (1Hr)</span><span id="rsi60" class="value">--</span></div>
-            <div class="row"><span class="label">Sentiment</span><span id="rsiSentiment" class="value">--</span></div>
-            <div class="row"><span class="label">Action</span><span id="rsiAction" class="value">--</span></div>
-            <div class="gradient-bar">
-                <div class="gradient-fill"></div>
-                <div class="vertical-indicator" id="cardRSIIndicator"></div>
-            </div>
-        </div>
-
-        <!-- MMI -->
-        <div class="card" id="cardMMI" data-sentiment="0">
-            <h2>Market Zone (MMI)</h2>
-            <div class="row"><span class="label">Zone</span><span id="zoneLabel" class="value">--</span></div>
-            <div class="row"><span class="label">Action</span><span id="mmiAction" class="value">--</span></div>
-            <div class="gradient-bar">
-                <div class="gradient-fill"></div>
-                <div class="vertical-indicator" id="cardMMIIndicator"></div>
-            </div>
-        </div>
-
-    </div>
-</div>
-
-<!-- ================== Market Bias Tab (split per strategy) ================== -->
-<div id="marketbias" class="tabcontent">
-    <div class="dashboard">
-        <!-- Main Bias Overview -->
-        <div class="card" id="cardBiasOverview" data-sentiment="0">
-            <h2>Market Bias Overview</h2>
-            <div class="row"><span class="label">Bias</span><span id="biasLabel" class="value">--</span></div>
-            <div class="row"><span class="label">Score</span><span id="biasScore" class="value">--</span></div>
-            <div class="row"><span class="label">Primary Action</span><span id="primaryAction" class="value">--</span></div>
-            <div class="row"><span class="label">Strategies</span><span id="strategyList" class="value">--</span></div>
-            <div class="gradient-bar">
-                <div class="gradient-fill"></div>
-                <div class="vertical-indicator" id="cardBiasIndicator"></div>
-            </div>
-        </div>
-
-        <!-- Strikes & Spreads -->
-        <div class="card" id="cardStrikes" data-sentiment="0">
-            <h2>Strikes & Spreads</h2>
-            <div class="row"><span class="label">CE Strike</span><span id="ceStrike" class="value">--</span></div>
-            <div class="row"><span class="label">PE Strike</span><span id="peStrike" class="value">--</span></div>
-            <div class="row"><span class="label">Spread CE</span><span id="spreadCE" class="value">--</span></div>
-            <div class="row"><span class="label">Spread PE</span><span id="spreadPE" class="value">--</span></div>
-            <div class="gradient-bar">
-                <div class="gradient-fill" style="width:50% !important;"></div>
-                <div class="vertical-indicator" style="left:50% !important;"></div>
-            </div>
-        </div>
-
-        <!-- Iron Condor card -->
-        <div class="card" id="cardIronCondor" data-sentiment="0">
-            <h2>Iron Condor</h2>
-            <div class="row"><span class="label">Sell CE</span><span id="ironCondorSellCE" class="value">--</span></div>
-            <div class="row"><span class="label">Buy CE</span><span id="ironCondorBuyCE" class="value">--</span></div>
-            <div class="row"><span class="label">Sell PE</span><span id="ironCondorSellPE" class="value">--</span></div>
-            <div class="row"><span class="label">Buy PE</span><span id="ironCondorBuyPE" class="value">--</span></div>
-            <div class="gradient-bar">
-                <div class="gradient-fill" style="width:50% !important;"></div>
-                <div class="vertical-indicator" style="left:50% !important;"></div>
-            </div>
-        </div>
-
-        <!-- Butterfly card -->
-        <div class="card" id="cardButterfly" data-sentiment="0">
-            <h2>Butterfly</h2>
-            <div class="row"><span class="label">Buy Lower</span><span id="butterflyBuyLower" class="value">--</span></div>
-            <div class="row"><span class="label">Sell</span><span id="butterflySell" class="value">--</span></div>
-            <div class="row"><span class="label">Buy Upper</span><span id="butterflyBuyUpper" class="value">--</span></div>
-            <div class="gradient-bar">
-                <div class="gradient-fill" style="width:50% !important;"></div>
-                <div class="vertical-indicator" style="left:50% !important;"></div>
-            </div>
-        </div>
-
-        <!-- Calendar card -->
-        <div class="card" id="cardCalendar" data-sentiment="0">
-            <h2>Calendar Spread</h2>
-            <div class="row"><span class="label">ATM CE</span><span id="calendarCE" class="value">--</span></div>
-            <div class="row"><span class="label">ATM PE</span><span id="calendarPE" class="value">--</span></div>
-            <div class="gradient-bar">
-                <div class="gradient-fill" style="width:50% !important;"></div>
-                <div class="vertical-indicator" style="left:50% !important;"></div>
-            </div>
-        </div>
-
-        <!-- Separate Warnings Card -->
-        <div class="card warning-card" id="cardWarnings">
-            <h2>⚠️ Strike Warnings</h2>
-            <div id="warningsContainer">
-                <div class="warning-list" id="strikeWarningsList">
-                    <div class="warning-item">No warnings</div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="footer">Auto-refresh every 5 minutes</div>
-
-<script>
-// --- Sentiment mapping ---
-function sentimentValue(sentiment){
-    if(!sentiment) return 0;
-    const s = sentiment.toLowerCase();
-    if(s.includes("extreme buy") || s.includes("strong buy")) return 2;
-    if(s.includes("buy")) return 1;
-    if(s.includes("neutral") || s.includes("hold")) return 0;
-    if(s.includes("sell")) return -1;
-    if(s.includes("extreme sell") || s.includes("strong sell")) return -2;
-    return 0;
+function getCardClass(text) {
+  if (!text) return "card neutral";
+  const t = text.toLowerCase();
+  if (t.includes("bull")) return "card bullish";
+  if (t.includes("bear")) return "card bearish";
+  if (t.includes("greed")) return "card warning";
+  if (t.includes("fear")) return "card bearish";
+  if (t.includes("complacent")) return "card bullish";
+  if (t.includes("stable")) return "card bullish";
+  if (t.includes("nervous")) return "card bearish";
+  if (t.includes("strong buy")) return "card bullish";
+  if (t.includes("strong sell")) return "card bearish";
+  if (t.includes("buy")) return "card bullish";
+  return "card neutral";
 }
 
-function sentimentClass(sentiment){
-    if(!sentiment) return "neutral";
-    const s = sentiment.toLowerCase();
-    if(s.includes("extreme buy") || s.includes("strong buy")) return "strong-bullish";
-    if(s.includes("buy")) return "bullish";
-    if(s.includes("neutral") || s.includes("hold")) return "neutral";
-    if(s.includes("sell")) return "bearish";
-    if(s.includes("extreme sell") || s.includes("strong sell")) return "strong-bearish";
-    return "neutral";
+function getMacdCardClass(macd) {
+  if (!macd) return "card neutral";
+
+  const macdSignal = macd?.MACD_signal;
+  const momentum = macd?.Momentum;
+  const stochasticSignal = macd?.Stochastic_signal;
+
+  if (macdSignal === "Bullish crossover" && momentum === "Positive") return "card bullish";
+  if (macdSignal === "Bearish crossover" && momentum === "Negative") return "card bearish";
+  if (stochasticSignal === "Overbought") return "card bearish";
+  if (stochasticSignal === "Oversold") return "card bullish";
+
+  return "card neutral";
 }
 
-function applyGradientBar(cardId, sentiment){
-    const val = sentimentValue(sentiment);
-    const fill = document.querySelector(`#${cardId} .gradient-fill`);
-    const indicator = document.getElementById(`${cardId}Indicator`);
-    if (!fill || !indicator) return;
-    const widthPercent = 50 + val * 25; // -2 → 0%, 0 → 50%, 2 → 100%
-    fill.style.width = widthPercent + "%";
-    indicator.style.left = widthPercent + "%";
-}
+function useAPI() {
+  const [data, setData] = useState({});
 
-function applySentimentColor(elementId, sentiment){
-    const el = document.getElementById(elementId);
-    if (!el) return;
-    el.className = "value " + sentimentClass(sentiment);
-    el.innerText = sentiment ?? "--";
-}
+  function isMarketOpen() {
+    const now = new Date();
+    const istTime = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+    const hours = istTime.getHours();
+    const minutes = istTime.getMinutes();
+    const totalMinutes = hours * 60 + minutes;
+    const marketOpen = 9 * 60;
+    const marketClose = 15 * 60 + 30;
+    return totalMinutes >= marketOpen && totalMinutes <= marketClose;
+  }
 
-// --- MMI zone color ---
-function mmiZoneClass(zone){
-    if(!zone) return "neutral";
-    const z = zone.toLowerCase();
-    if(z.includes("extreme fear")) return "strong-bearish";
-    if(z.includes("fear")) return "bearish";
-    if(z.includes("extreme greed")) return "strong-bullish";
-    if(z.includes("greed") && !z.includes("extreme")) return "bullish";
-    return "neutral";
-}
-
-function applyMMIColor(zone){
-    const el = document.getElementById("zoneLabel");
-    el.className = "value " + mmiZoneClass(zone);
-    el.innerText = zone ?? "--";
-}
-
-function applyMMIPointer(value){
-    const indicator = document.getElementById("cardMMIIndicator");
-    if(value !== undefined && !isNaN(value)){
-        const pct = Math.max(0, Math.min(100, value));
-        indicator.style.left = pct + "%";
-    } else {
-        indicator.style.left = "50%";
+  async function fetchAll() {
+    const results = {};
+    for (const key in endpoints) {
+      try {
+        const res = await fetch(endpoints[key]);
+        results[key] = await res.json();
+      } catch {
+        results[key] = null;
+      }
     }
+    setData(results);
+  }
+
+  useEffect(() => {
+    fetchAll();
+    if (!isMarketOpen()) return;
+    const interval = setInterval(fetchAll, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return { data };
 }
 
-// Update warnings display
-function updateWarnings(warnings) {
-    const container = document.getElementById("strikeWarningsList");
-    if (!container) return;
-    if (!warnings || warnings.length === 0) {
-        container.innerHTML = '<div class="warning-item" style="color:#9ca3af;">No warnings</div>';
-        return;
-    }
-    container.innerHTML = warnings.map(warning => 
-        `<div class="warning-item">${warning}</div>`
-    ).join('');
+function KeyValue({label, value}) {
+  return (
+    <div className="flex justify-between py-1 text-sm gap-3 items-start">
+      <span className="text-gray-400 flex-shrink-0 min-w-0">{label}</span>
+      <span className="text-right break-words overflow-wrap-anywhere max-w-[60%]">{value ?? "-"}</span>
+    </div>
+  );
 }
 
+function ToggleButton({ isHidden, onToggle }) {
+  return (
+    <button
+      onClick={onToggle}
+      className="toggle-btn"
+      title={isHidden ? "Show card" : "Hide card"}
+    >
+      {isHidden ? (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+          <line x1="1" y1="1" x2="23" y2="23"/>
+        </svg>
+      )}
+    </button>
+  );
+}
 
-// Tabs
-document.querySelectorAll(".tab").forEach(tab=>{
-    tab.addEventListener("click",()=>{
-        document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
-        tab.classList.add("active");
-        document.querySelectorAll(".tabcontent").forEach(tc=>tc.classList.remove("active"));
-        document.getElementById(tab.dataset.tab).classList.add("active");
-    });
-});
+function LiveIndicesCard({indices}) {
+  return (
+    <div className="card neutral">
+      <div className="section-title">Live Indices</div>
+      <div className="grid grid-cols-3 gap-6 text-center">
+        <div>
+          <div className="text-3xl font-bold text-cyan-400">{indices?.NIFTY50}</div>
+          <div className="text-gray-400">NIFTY50</div>
+        </div>
+        <div>
+          <div className="text-3xl font-bold text-emerald-400">{indices?.BANKNIFTY}</div>
+          <div className="text-gray-400">BANKNIFTY</div>
+        </div>
+        <div>
+          <div className="text-3xl font-bold text-rose-400">{indices?.SENSEX}</div>
+          <div className="text-gray-400">SENSEX</div>
+        </div>
+      </div>
+      <div className="mt-4 text-gray-500 text-sm">{indices?.timestamp}</div>
+    </div>
+  );
+}
 
-// Fetch indicators
-async function fetchIndicators(){
+/* ---------------- MOVING AVERAGES CARDS ---------------- */
+
+function NiftyPriceCard({niftyavgs, isHidden, onToggle}) {
+  if (!niftyavgs) return null;
+
+  const { price_data, trend_analysis } = niftyavgs;
+
+  const hasBullishTrend = trend_analysis?.some(t => t.includes("bullish"));
+  const hasBearishTrend = trend_analysis?.some(t => t.includes("Bearish"));
+  
+  let trendClass = "card neutral";
+  if (hasBullishTrend && !hasBearishTrend) trendClass = "card bullish";
+  else if (hasBearishTrend) trendClass = "card bearish";
+
+  return (
+    <div className={`${trendClass} ${isHidden ? 'card-hidden' : ''}`}>
+      <ToggleButton isHidden={isHidden} onToggle={onToggle} />
+      <div className="section-title">NIFTY Trend Analysis</div>
+      {!isHidden && trend_analysis && trend_analysis.length > 0 && (
+        <div>
+          <div className="text-sm font-semibold text-gray-300 mb-2">Trend Signals</div>
+          {trend_analysis.map((trend, idx) => (
+            <div key={idx} className="text-sm text-gray-300 py-1">
+              • {trend}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SimpleMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
+  if (!niftyavgs) return null;
+
+  const { moving_averages } = niftyavgs;
+
+  return (
+    <div className={`card neutral ${isHidden ? 'card-hidden' : ''}`}>
+      <ToggleButton isHidden={isHidden} onToggle={onToggle} />
+      <div className="section-title">Simple Moving Averages</div>
+      {!isHidden && moving_averages && (
+        <div className="space-y-1">
+          <KeyValue 
+            label="MA 10" 
+            value={`${moving_averages.MA_10?.value} (${moving_averages.MA_10?.position} ${moving_averages.MA_10?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="MA 20" 
+            value={`${moving_averages.MA_20?.value} (${moving_averages.MA_20?.position} ${moving_averages.MA_20?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="MA 50" 
+            value={`${moving_averages.MA_50?.value} (${moving_averages.MA_50?.position} ${moving_averages.MA_50?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="MA 100" 
+            value={`${moving_averages.MA_100?.value} (${moving_averages.MA_100?.position} ${moving_averages.MA_100?.difference_percent}%)`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExponentialMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
+  if (!niftyavgs) return null;
+
+  const { exponential_moving_averages } = niftyavgs;
+
+  return (
+    <div className={`card neutral ${isHidden ? 'card-hidden' : ''}`}>
+      <ToggleButton isHidden={isHidden} onToggle={onToggle} />
+      <div className="section-title">Exponential Moving Averages</div>
+      {!isHidden && exponential_moving_averages && (
+        <div className="space-y-1">
+          <KeyValue 
+            label="EMA 10" 
+            value={`${exponential_moving_averages.EMA_10?.value} (${exponential_moving_averages.EMA_10?.position} ${exponential_moving_averages.EMA_10?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="EMA 20" 
+            value={`${exponential_moving_averages.EMA_20?.value} (${exponential_moving_averages.EMA_20?.position} ${exponential_moving_averages.EMA_20?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="EMA 50" 
+            value={`${exponential_moving_averages.EMA_50?.value} (${exponential_moving_averages.EMA_50?.position} ${exponential_moving_averages.EMA_50?.difference_percent}%)`}
+          />
+          <KeyValue 
+            label="EMA 100" 
+            value={`${exponential_moving_averages.EMA_100?.value} (${exponential_moving_averages.EMA_100?.position} ${exponential_moving_averages.EMA_100?.difference_percent}%)`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- DASHBOARD ---------------- */
+
+function DashboardTab({data}) {
+  const { pcr, vix, oi, rsi, indices, niftyavgs, macd } = data;
+  const hiddenCardsStorageKey = "dashboardHiddenCards";
+  const defaultHiddenCards = {
+    pcr: false,
+    vix: false,
+    oi: false,
+    rsi: false,
+    niftyPrice: false,
+    sma: false,
+    ema: false,
+    macd: false
+  };
+  
+  const [hiddenCards, setHiddenCards] = useState(() => {
     try {
-        const [indicesRes, vixRes, pcrRes, rsiRes, mmiRes] = await Promise.all([
-            fetch("/api/indices"),
-            fetch("/api/vix"),
-            fetch("/api/pcr"),
-            fetch("/api/rsi"),
-            fetch("/api/mmi")
-        ]);
+      const savedHiddenCards = localStorage.getItem(hiddenCardsStorageKey);
+      if (!savedHiddenCards) return defaultHiddenCards;
 
-        const indices = await indicesRes.json();
-        const vixData = await vixRes.json();
-        const pcrData = await pcrRes.json();
-        const rsiData = await rsiRes.json();
-        const mmiData = await mmiRes.json();
-
-        document.getElementById("nifty50").innerText = indices.NIFTY50?.toFixed(2) ?? "--";
-        document.getElementById("banknifty").innerText = indices.BANKNIFTY?.toFixed(2) ?? "--";
-        document.getElementById("sensex").innerText = indices.SENSEX?.toFixed(2) ?? "--";
-        applyGradientBar("cardIndices", indices.sentiment);
-
-        document.getElementById("vix").innerText = vixData.vix?.toFixed(2) ?? "--";
-        applySentimentColor("vixSentiment", vixData.sentiment);
-        document.getElementById("vixAction").innerText = vixData.action ?? "--";
-        applyGradientBar("cardVIX", vixData.sentiment);
-
-        document.getElementById("pcr").innerText = pcrData.pcr?.toFixed(2) ?? "--";
-        applySentimentColor("pcrSentiment", pcrData.sentiment);
-        document.getElementById("pcrAction").innerText = pcrData.action ?? "--";
-        applyGradientBar("cardPCR", pcrData.sentiment);
-
-        document.getElementById("rsi15").innerText = rsiData.rsi15min?.toFixed(2) ?? "--";
-        document.getElementById("rsi60").innerText = rsiData.rsi1hr?.toFixed(2) ?? "--";
-        applySentimentColor("rsiSentiment", rsiData.sentiment);
-        document.getElementById("rsiAction").innerText = rsiData.action ?? "--";
-        applyGradientBar("cardRSI", rsiData.sentiment);
-
-        applyMMIColor(mmiData.zone);
-        applySentimentColor("mmiAction", mmiData.action);
-        applyGradientBar("cardMMI", mmiData.sentiment);
-
-        applyMMIPointer(mmiData.value);
-
-    } catch(e){ console.error("Indicators fetch failed", e);}
-}
-
-async function fetchOIChangePCR(){
-    try{
-        const res = await fetch("/api/oi-change");
-        const data = await res.json();
-
-        document.getElementById("oiChangePcr").innerText =
-            data.oi_change_pcr?.toFixed(2) ?? "--";
-
-        applySentimentColor("oiChangePcrSentiment", data.sentiment);
-        document.getElementById("oiChangePcrAction").innerText =
-            data.action ?? "--";
-
-        applyGradientBar("cardOIChangePCR", data.sentiment);
-
-    } catch(e){
-        console.error("OI Change PCR fetch failed", e);
+      const parsedHiddenCards = JSON.parse(savedHiddenCards);
+      return { ...defaultHiddenCards, ...parsedHiddenCards };
+    } catch {
+      return defaultHiddenCards;
     }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(hiddenCardsStorageKey, JSON.stringify(hiddenCards));
+  }, [hiddenCards]);
+
+  const toggleCard = (cardName) => {
+    setHiddenCards(prev => ({
+      ...prev,
+      [cardName]: !prev[cardName]
+    }));
+  };
+
+  // Separate visible and hidden cards
+  const cards = [
+    { id: 'pcr', component: (
+      <div className={`${getCardClass(pcr?.zone)} ${hiddenCards.pcr ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.pcr} onToggle={() => toggleCard('pcr')} />
+        <div className="section-title">Overall PCR</div>
+        {!hiddenCards.pcr && (
+          <>
+            <KeyValue label="PCR" value={pcr?.pcr}/>
+            <KeyValue label="Sentiment" value={pcr?.sentiment}/>
+            <KeyValue label="Zone" value={pcr?.zone}/>
+            <div className="mt-3 text-sm break-words">{pcr?.action}</div>
+          </>
+        )}
+      </div>
+    )},
+    { id: 'vix', component: (
+      <div className={`${getCardClass(vix?.sentiment)} ${hiddenCards.vix ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.vix} onToggle={() => toggleCard('vix')} />
+        <div className="section-title">VIX</div>
+        {!hiddenCards.vix && (
+          <>
+            <KeyValue label="VIX" value={vix?.vix}/>
+            <KeyValue label="Sentiment" value={vix?.sentiment}/>
+            <div className="mt-3 text-sm break-words">{vix?.action}</div>
+          </>
+        )}
+      </div>
+    )},
+    { id: 'oi', component: (
+      <div className={`${getCardClass(oi?.zone)} ${hiddenCards.oi ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.oi} onToggle={() => toggleCard('oi')} />
+        <div className="section-title">Intraday OI Change PCR</div>
+        {!hiddenCards.oi && (
+          <>
+            <KeyValue label="Value" value={oi?.oi_change_pcr}/>
+            <KeyValue label="Sentiment" value={oi?.sentiment}/>
+            <KeyValue label="Zone" value={oi?.zone}/>
+            <div className="mt-3 text-sm break-words">{oi?.action}</div>
+          </>
+        )}
+      </div>
+    )},
+    { id: 'rsi', component: (
+      <div className={`${getCardClass(rsi?.sentiment)} ${hiddenCards.rsi ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.rsi} onToggle={() => toggleCard('rsi')} />
+        <div className="section-title">RSI</div>
+        {!hiddenCards.rsi && (
+          <>
+            <KeyValue label="RSI 15min" value={rsi?.rsi15min}/>
+            <KeyValue label="RSI 1hr" value={rsi?.rsi1hr}/>
+            <KeyValue label="Sentiment" value={rsi?.sentiment}/>
+          </>
+        )}
+      </div>
+    )},
+    { id: 'niftyPrice', component: <NiftyPriceCard niftyavgs={niftyavgs} isHidden={hiddenCards.niftyPrice} onToggle={() => toggleCard('niftyPrice')} /> },
+    { id: 'sma', component: <SimpleMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.sma} onToggle={() => toggleCard('sma')} /> },
+    { id: 'ema', component: <ExponentialMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.ema} onToggle={() => toggleCard('ema')} /> },
+    { id: 'macd', component: (
+      <div className={`${getMacdCardClass(macd)} ${hiddenCards.macd ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.macd} onToggle={() => toggleCard('macd')} />
+        <div className="section-title">MACD Indicator</div>
+        {!hiddenCards.macd && (
+          <>
+            <KeyValue label="MACD Signal" value={macd?.MACD_signal}/>
+            <KeyValue label="Stochastic" value={macd?.Stochastic_signal}/>
+            <KeyValue label="Momentum" value={macd?.Momentum}/>
+            <div className="mt-3 text-sm break-words">{macd?.Option_Strategy}</div>
+          </>
+        )}
+      </div>
+    )},
+  ];
+
+  const visibleCards = cards.filter(card => !hiddenCards[card.id]);
+  const collapsedCards = cards.filter(card => hiddenCards[card.id]);
+
+  return (
+    <div className="space-y-8">
+      <LiveIndicesCard indices={indices} />
+
+      <div className="grid md:grid-cols-3 gap-6">
+        {visibleCards.map(card => (
+          <div key={card.id}>{card.component}</div>
+        ))}
+        {collapsedCards.map(card => (
+          <div key={card.id}>{card.component}</div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-// Fetch market bias with split strategy cards
-async function fetchMarketBias(){
-    try{
-        const res = await fetch("/api/marketbias");
-        const data = await res.json();
+/* ---------------- STRATEGY ACCORDION ---------------- */
 
-        // Overview card
-        applySentimentColor("biasLabel", data.bias);
-        document.getElementById("biasScore").innerText = data.score ?? "--";
-        document.getElementById("primaryAction").innerText = data.primary_action ?? "--";
-        document.getElementById("strategyList").innerText = (data.strategy_list||[]).join(", ") || "--";
+function StrategyAccordion({ name, data, isOpen, onToggle }) {
+  const [deployed, setDeployed] = useState(false);
+  const [quantity, setQuantity] = useState(1);
 
-        // Strikes & Spreads
-        const strikes = data.strikes || {};
-        document.getElementById("ceStrike").innerText = strikes.ce_strike ?? "--";
-        document.getElementById("peStrike").innerText = strikes.pe_strike ?? "--";
-        document.getElementById("spreadCE").innerText = strikes.spread_ce ? 
-            `Buy: ${strikes.spread_ce.buy}, Sell: ${strikes.spread_ce.sell}` : "--";
-        document.getElementById("spreadPE").innerText = strikes.spread_pe ? 
-            `Buy: ${strikes.spread_pe.buy}, Sell: ${strikes.spread_pe.sell}` : "--";
+  if (!data) return null;
 
-        // Iron Condor
-        const ic = strikes.iron_condor || {};
-        document.getElementById("ironCondorSellCE").innerText = ic.sell_ce ?? "--";
-        document.getElementById("ironCondorBuyCE").innerText = ic.buy_ce ?? "--";
-        document.getElementById("ironCondorSellPE").innerText = ic.sell_pe ?? "--";
-        document.getElementById("ironCondorBuyPE").innerText = ic.buy_pe ?? "--";
+  const handleDeploy = (e) => {
+    e.stopPropagation();
+    console.log(`Executed strategy: ${name} with quantity: ${quantity}`);
+    setDeployed(true);
+    setTimeout(() => setDeployed(false), 1500);
+  };
 
-        // Butterfly
-        const bf = strikes.butterfly || {};
-        document.getElementById("butterflyBuyLower").innerText = bf.buy_lower ?? "--";
-        document.getElementById("butterflySell").innerText = bf.sell ?? "--";
-        document.getElementById("butterflyBuyUpper").innerText = bf.buy_upper ?? "--";
+  return (
+    <div className="border border-gray-700 rounded-lg mt-3 overflow-hidden">
+      <div
+        onClick={() => onToggle(name)}
+        className="cursor-pointer bg-gray-800 px-4 py-3 flex justify-between items-center hover:bg-gray-700"
+      >
+        <span className="font-medium">{name}</span>
+        <span>{isOpen ? "▲" : "▼"}</span>
+      </div>
 
-        // Calendar
-        const cal = strikes.calendar || {};
-        document.getElementById("calendarCE").innerText = cal.ce_atm ?? "--";
-        document.getElementById("calendarPE").innerText = cal.pe_atm ?? "--";
+      {isOpen && (
+        <div className="bg-gray-900 px-4 py-3 space-y-2">
+          {Object.entries(data).map(([k,v]) => (
+            <KeyValue key={k} label={k} value={v}/>
+          ))}
 
-        // Warnings
-        const warnings = strikes.warnings || [];
-        updateWarnings(warnings);
+          <div className="flex items-center gap-4 mt-2">
+            <select
+              className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
+              value={quantity}
+              onChange={(e) => setQuantity(Number(e.target.value))}
+            >
+              {[...Array(10)].map((_, i) => (
+                <option key={i+1} value={i+1}>{i+1}</option>
+              ))}
+            </select>
 
-        // Bias indicator
-        const indicator = document.getElementById("cardBiasIndicator");
-        const pct = Math.max(0, Math.min(100, data.score ?? 50));
-        indicator.style.left = pct + "%";
-        const fill = document.querySelector("#cardBiasOverview .gradient-fill");
-        fill.style.width = pct + "%";
-
-    } catch(e){ console.error("Market bias fetch failed", e); }
+            <button
+              onClick={handleDeploy}
+              className={`px-4 py-2 rounded-md text-white ${deployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
+            >
+              Deploy
+            </button>
+            {deployed && <span className="text-green-400 font-medium">Successfully deployed</span>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
-// Refresh
-async function refreshDashboard(){
-    await Promise.all([
-        fetchIndicators(),
-        fetchMarketBias(),
-        fetchOIChangePCR()
-    ]);
-    console.log("Dashboard refreshed", new Date().toLocaleTimeString());
+/* ---------------- ATM OPTIONS CARD ---------------- */
+
+function ATMOptionsCard({ ce, pe }) {
+  const [ceQty, setCeQty] = useState(1);
+  const [peQty, setPeQty] = useState(1);
+  const [ceDeployed, setCeDeployed] = useState(false);
+  const [peDeployed, setPeDeployed] = useState(false);
+
+  const handleCeDeploy = () => {
+    console.log("Deployed CE strike", { ce, ceQty });
+    setCeDeployed(true);
+    setTimeout(() => setCeDeployed(false), 1500);
+  };
+
+  const handlePeDeploy = () => {
+    console.log("Deployed PE strike", { pe, peQty });
+    setPeDeployed(true);
+    setTimeout(() => setPeDeployed(false), 1500);
+  };
+
+  return (
+    <div className="card neutral mt-4 p-4">
+      <div className="section-title">ATM Options</div>
+
+      <div className="grid grid-cols-1 gap-6 mt-2">
+
+        {/* CE Strike */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <div className="font-medium">CE Strike</div>
+              <div className="text-sm text-gray-200">{ce ?? "-"}</div>
+            </div>
+            <div className="flex gap-2">
+              <select
+                className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
+                value={ceQty}
+                onChange={(e) => setCeQty(Number(e.target.value))}
+              >
+                {[...Array(100)].map((_, i) => (
+                  <option key={i+1} value={i+1}>{i+1}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleCeDeploy}
+                className={`px-4 py-2 rounded-md text-white ${ceDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
+              >
+                Deploy CE
+              </button>
+              {ceDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* Separator Line */}
+        <div className="border-t border-gray-600 mx-4"></div>
+
+        {/* PE Strike */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <div className="font-medium">PE Strike</div>
+              <div className="text-sm text-gray-200">{pe ?? "-"}</div>
+            </div>
+            <div className="flex gap-2">
+              <select
+                className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
+                value={peQty}
+                onChange={(e) => setPeQty(Number(e.target.value))}
+              >
+                {[...Array(100)].map((_, i) => (
+                  <option key={i+1} value={i+1}>{i+1}</option>
+                ))}
+              </select>
+              <button
+                onClick={handlePeDeploy}
+                className={`px-4 py-2 rounded-md text-white ${peDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
+              >
+                Deploy PE
+              </button>
+              {peDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
 }
 
-refreshDashboard();
-setInterval(refreshDashboard, 1000);
+/* ---------------- OPTIONS ENGINE TAB ---------------- */
+
+function OptionsEngineTab({data}) {
+  const { bias, indices } = data;
+  const [openStrategy, setOpenStrategy] = useState(null);
+
+  if (!bias) return null;
+
+  const handleToggle = (name) => setOpenStrategy(openStrategy === name ? null : name);
+
+  return (
+    <div className="space-y-8">
+      <LiveIndicesCard indices={indices} />
+
+      <div className={getCardClass(bias?.bias)}>
+        <div className="section-title">Options Strategy Engine</div>
+        <KeyValue label="Bias" value={bias?.bias}/>
+        <KeyValue label="Score" value={bias?.score}/>
+        <KeyValue label="VIX" value={bias?.vix}/>
+        <div className="mt-4 border-t border-gray-700 pt-3">
+          <div className="text-sm font-medium break-words">
+            Execution Guidance: {bias?.primary_action || "Awaiting Setup"}
+          </div>
+        </div>
+      </div>
+
+      <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} />
+
+      <div className="card neutral">
+        <div className="section-title">Strategy List</div>
+
+        <StrategyAccordion
+          name="Butterfly"
+          data={bias?.strikes?.butterfly}
+          isOpen={openStrategy === "Butterfly"}
+          onToggle={handleToggle}
+        />
+        <StrategyAccordion
+          name="Iron Condor"
+          data={bias?.strikes?.iron_condor}
+          isOpen={openStrategy === "Iron Condor"}
+          onToggle={handleToggle}
+        />
+        <StrategyAccordion
+          name="Calendar"
+          data={bias?.strikes?.calendar}
+          isOpen={openStrategy === "Calendar"}
+          onToggle={handleToggle}
+        />
+        <StrategyAccordion
+          name="Call Spread"
+          data={bias?.strikes?.spread_ce}
+          isOpen={openStrategy === "Call Spread"}
+          onToggle={handleToggle}
+        />
+        <StrategyAccordion
+          name="Put Spread"
+          data={bias?.strikes?.spread_pe}
+          isOpen={openStrategy === "Put Spread"}
+          onToggle={handleToggle}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- MMI ---------------- */
+
+function MMITab({data}) {
+  const { mmi, indices } = data;
+  if (!mmi) return null;
+
+  return (
+    <div className="space-y-8">
+      <LiveIndicesCard indices={indices} />
+
+      <div className={getCardClass(mmi?.zone)}>
+        <div className="section-title">Market Mood Index (Investment)</div>
+
+        <KeyValue label="Value" value={mmi?.value}/>
+        <KeyValue label="Zone" value={mmi?.zone}/>
+        <div className="mt-3 text-sm break-words">{mmi?.action}</div>
+
+        {mmi?.portfolio_guidance && (
+          <div className="mt-4 border-t border-gray-700 pt-3 space-y-1">
+            <KeyValue label="Regime" value={mmi?.portfolio_guidance?.regime}/>
+            <KeyValue label="Investment View" value={mmi?.portfolio_guidance?.investment_view}/>
+            <KeyValue label="Equity Exposure" value={mmi?.portfolio_guidance?.equity_exposure}/>
+            <KeyValue label="Risk Level" value={mmi?.portfolio_guidance?.risk_level}/>
+            <KeyValue label="Strategy" value={mmi?.portfolio_guidance?.action}/>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FiiDiiTab() {
+  return (
+    <div className="bg-black border border-gray-800 rounded-xl min-h-[65vh] flex items-center justify-center">
+      <div className="text-center px-6">
+        <div className="text-xl font-semibold text-gray-200">FII DII Data</div>
+        <div className="text-sm text-gray-500 mt-2">Data view coming soon.</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- MAIN APP ---------------- */
+
+function App() {
+  const { data } = useAPI();
+  const [tab, setTab] = useState("dashboard");
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+
+      <div className="flex border-b border-gray-700 mb-6">
+        <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
+        <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
+        <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
+        <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
+      </div>
+
+      {tab==="dashboard" && <DashboardTab data={data} />}
+      {tab==="options" && <OptionsEngineTab data={data} />}
+      {tab==="mmi" && <MMITab data={data} />}
+      {tab==="fii-dii" && <FiiDiiTab />}
+
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
 </script>
-
 </body>
 </html>
