@@ -1109,6 +1109,18 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
     ? connectedBrokerName.charAt(0).toUpperCase() + connectedBrokerName.slice(1)
     : null;
 
+  useEffect(() => {
+    if (!connectedBrokerName) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      onSkip();
+    }, 3000);
+
+    return () => clearTimeout(timeout);
+  }, [connectedBrokerName, onSkip]);
+
   if (connectedBrokerLabel) {
     return (
       <div className="space-y-6 max-w-3xl mx-auto">
