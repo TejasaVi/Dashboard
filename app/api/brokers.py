@@ -36,8 +36,6 @@ def switch_broker():
         return jsonify({"success": False, "error": str(exc)}), 400
 
 
-
-
 @brokers_bp.route("/brokers/disconnect", methods=["POST"])
 def disconnect_broker():
     payload = request.get_json(silent=True) or {}
@@ -57,6 +55,7 @@ def disconnect_broker():
         "broker": broker,
         "status": order_execution_engine.broker_status().get(broker, {}),
     })
+
 
 @brokers_bp.route("/brokers/place-order", methods=["POST"])
 def place_order_multi():
