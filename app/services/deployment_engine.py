@@ -70,6 +70,9 @@ class DeploymentEngine:
             return {"variety": "AMO", "product": "NRML"}
         return {"variety": "REGULAR", "product": "NRML"}
 
+    def _is_amo_mode(self, mode: Dict[str, str]) -> bool:
+        return (mode.get("variety") or "").upper() == "AMO"
+
     def _serialize_plan(self, plan: DeploymentPlan) -> Dict[str, Any]:
         data = asdict(plan)
         data["created_at"] = plan.created_at.isoformat()
@@ -80,11 +83,12 @@ class DeploymentEngine:
     def create_plan(self, request: DeploymentRequest, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         metadata = metadata or {}
         now = self._ist_now()
+        mode = self._order_mode(now)
 
         if not self._is_weekday(now):
             raise ValueError("Deployment is only supported Monday to Friday")
 
-        if not self._is_deployment_window(now):
+        if not self._is_deployment_window(now) and not self._is_amo_mode(mode):
             raise ValueError("Deployments allowed only between 9:40 AM and 2:50 PM IST")
 
         zerodha_client.cancel_pending_nfo_orders()
@@ -112,14 +116,18 @@ class DeploymentEngine:
             request=request,
             created_at=now,
             status="PENDING_START",
-            mode=self._order_mode(now),
+            mode=mode,
             max_lots_from_margin=max_by_margin,
             effective_max_lots=max_lots,
             initial_price=current_price,
             bought_lots=0,
             pending_lots=max_lots,
             metadata=metadata,
-            events=["Plan created; waiting for engine tick to place first lot"],
+            events=[
+                "Plan created; waiting for engine tick to place first lot"
+                if not self._is_amo_mode(mode)
+                else "Plan created in AMO mode; engine can place market AMO orders for testing"
+            ],
         )
 
         with self._lock:
@@ -166,7 +174,7 @@ class DeploymentEngine:
         if plan.status in {"EXITED", "CLOSED", "EXPIRED", "ERROR"}:
             return
 
-        if now.time() >= time(14, 59) and plan.bought_lots > 0:
+        if not self._is_amo_mode(plan.mode) and now.time() >= time(14, 59) and plan.bought_lots > 0:
             self._place_lots(
                 plan,
                 lots=plan.bought_lots,
@@ -178,7 +186,7 @@ class DeploymentEngine:
             return
 
         if plan.status == "PENDING_START":
-            if not self._is_deployment_window(now):
+            if not self._is_amo_mode(plan.mode) and not self._is_deployment_window(now):
                 if now.time() > time(14, 50):
                     plan.status = "EXPIRED"
                     plan.events.append("Plan expired without first deployment")
