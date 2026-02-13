@@ -48,10 +48,10 @@ rsi_bp = Blueprint("rsi", __name__)
 @rsi_bp.route("/rsi", methods=["GET"])
 def rsi_check():
     rsi60 = get_nifty_rsi()
-    rsi60_value = rsi60["rsi_value"]
+    rsi60_value = rsi60["rsi_value"].iloc[0]
 
     rsi15 = get_nifty_rsi(interval="15m")
-    rsi15_value = rsi15["rsi_value"]
+    rsi15_value = rsi15["rsi_value"].iloc[0]
 
     # Determine sentiment
     if rsi60_value < 30:
