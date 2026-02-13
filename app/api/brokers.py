@@ -1,6 +1,9 @@
 from flask import Blueprint, jsonify, request
 
 from app.services.broker_engine import OrderRequest, broker_switcher, order_execution_engine, strategy_router
+from app.services.fyers import fyers_client
+from app.services.stoxkart import stoxkart_client
+from app.services.zerodha import zerodha_client
 
 brokers_bp = Blueprint("brokers", __name__)
 
@@ -77,3 +80,57 @@ def execute_strategy():
         return jsonify(result), code
     except Exception as exc:
         return jsonify({"success": False, "error": str(exc)}), 400
+
+
+@brokers_bp.route("/brokers/configure", methods=["POST"])
+def configure_broker():
+    payload = request.get_json(silent=True) or {}
+    broker = (payload.get("broker") or "").lower().strip()
+
+    if broker == "zerodha":
+        api_key = payload.get("api_key", "")
+        api_secret = payload.get("api_secret", "")
+        access_token = payload.get("access_token", "")
+        if not api_key or not api_secret:
+            return jsonify({"success": False, "error": "api_key and api_secret are required for Zerodha"}), 400
+        zerodha_client.configure(api_key=api_key, api_secret=api_secret, access_token=access_token)
+    elif broker == "fyers":
+        api_key = payload.get("api_key", "")
+        api_secret = payload.get("api_secret", "")
+        redirect_uri = payload.get("redirect_uri")
+        access_token = payload.get("access_token", "")
+        if not api_key or not api_secret:
+            return jsonify({"success": False, "error": "api_key and api_secret are required for Fyers"}), 400
+        fyers_client.configure(
+            client_id=api_key,
+            secret_key=api_secret,
+            redirect_uri=redirect_uri,
+            access_token=access_token,
+        )
+    elif broker == "stoxkart":
+        api_key = payload.get("api_key", "")
+        api_secret = payload.get("api_secret", "")
+        redirect_uri = payload.get("redirect_uri")
+        auth_base_url = payload.get("auth_base_url")
+        token_url = payload.get("token_url")
+        api_base_url = payload.get("api_base_url")
+        access_token = payload.get("access_token", "")
+        if not api_key or not api_secret:
+            return jsonify({"success": False, "error": "api_key and api_secret are required for Stoxkart"}), 400
+        stoxkart_client.configure(
+            client_id=api_key,
+            secret_key=api_secret,
+            redirect_uri=redirect_uri,
+            auth_base_url=auth_base_url,
+            token_url=token_url,
+            api_base_url=api_base_url,
+            access_token=access_token,
+        )
+    else:
+        return jsonify({"success": False, "error": "Unsupported broker"}), 400
+
+    return jsonify({
+        "success": True,
+        "broker": broker,
+        "configured": order_execution_engine.broker_status().get(broker, {}),
+    })

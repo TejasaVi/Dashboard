@@ -98,6 +98,15 @@ async function placeBrokerOrder(order) {
   return res.json();
 }
 
+async function configureBrokerCredentials(payload) {
+  const res = await fetch("/api/brokers/configure", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 const endpoints = {
   pcr: "/api/pcr",
   vix: "/api/vix",
@@ -721,11 +730,44 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}
 
 function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, activeBroker, setActiveBroker, failoverEnabled, setFailoverEnabled }) {
   const [message, setMessage] = useState("");
+  const [credentials, setCredentials] = useState({
+    zerodha: { api_key: "", api_secret: "", access_token: "" },
+    fyers: { api_key: "", api_secret: "", redirect_uri: "", access_token: "" },
+    stoxkart: {
+      api_key: "",
+      api_secret: "",
+      redirect_uri: "",
+      auth_base_url: "",
+      token_url: "",
+      api_base_url: "",
+      access_token: "",
+    },
+  });
 
   const toggleBroker = (broker) => {
     setSelectedBrokers((prev) => prev.includes(broker) ? prev.filter((b) => b !== broker) : [...prev, broker]);
   };
 
+  const onFieldChange = (broker, field, value) => {
+    setCredentials((prev) => ({
+      ...prev,
+      [broker]: {
+        ...prev[broker],
+        [field]: value,
+      },
+    }));
+  };
+
+  const configureBroker = async (broker) => {
+    const payload = { broker, ...credentials[broker] };
+    const res = await configureBrokerCredentials(payload);
+    if (res.success) {
+      setMessage(`Configured ${broker} successfully`);
+      refreshBrokerStatus();
+      return;
+    }
+    setMessage(res.error || `Unable to configure ${broker}`);
+  };
 
   const changeActive = async (broker) => {
     const res = await switchActiveBroker(broker);
@@ -750,8 +792,10 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
     refreshBrokerStatus();
   }, []);
 
-  const BrokerConnectionCard = ({ broker, title }) => {
+  const BrokerConnectionCard = ({ broker, title, fields = [] }) => {
     const state = brokerStatus?.brokers?.[broker] || {};
+    const brokerCreds = credentials[broker] || {};
+
     return (
       <div className="card neutral">
         <div className="section-title">{title}</div>
@@ -759,8 +803,25 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
           <div>Configured: <span className="font-semibold">{state.configured ? "Yes" : "No"}</span></div>
           <div>Connected: <span className="font-semibold">{state.connected ? "Yes" : "No"}</span></div>
         </div>
-        <div className="flex items-center justify-between mt-4">
-          <button onClick={() => connect(broker)} className="px-4 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500">Connect</button>
+
+        <div className="mt-4 space-y-2">
+          {fields.map((field) => (
+            <input
+              key={field.name}
+              type={field.type || "text"}
+              placeholder={field.label}
+              className="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-sm"
+              value={brokerCreds[field.name] || ""}
+              onChange={(e) => onFieldChange(broker, field.name, e.target.value)}
+            />
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between mt-4 gap-2 flex-wrap">
+          <div className="flex gap-2">
+            <button onClick={() => configureBroker(broker)} className="px-3 py-2 rounded-md text-white bg-emerald-600 hover:bg-emerald-500 text-sm">Save Keys</button>
+            <button onClick={() => connect(broker)} className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Connect</button>
+          </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={selectedBrokers.includes(broker)} onChange={() => toggleBroker(broker)} />
             Use for deploy
@@ -773,11 +834,40 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
   return (
     <div className="space-y-6">
       <div className="grid md:grid-cols-3 gap-6">
-        <BrokerConnectionCard broker="zerodha" title="Zerodha Connection" />
-        <BrokerConnectionCard broker="fyers" title="Fyers Connection" />
-        <BrokerConnectionCard broker="stoxkart" title="Stoxkart Connection" />
+        <BrokerConnectionCard
+          broker="zerodha"
+          title="Zerodha Connection"
+          fields={[
+            { name: "api_key", label: "API Key" },
+            { name: "api_secret", label: "API Secret", type: "password" },
+            { name: "access_token", label: "Access Token (optional)" },
+          ]}
+        />
+        <BrokerConnectionCard
+          broker="fyers"
+          title="Fyers Connection"
+          fields={[
+            { name: "api_key", label: "API Key / Client ID" },
+            { name: "api_secret", label: "API Secret", type: "password" },
+            { name: "redirect_uri", label: "Redirect URI (optional)" },
+            { name: "access_token", label: "Access Token (optional)" },
+          ]}
+        />
+        <BrokerConnectionCard
+          broker="stoxkart"
+          title="Stoxkart Connection"
+          fields={[
+            { name: "api_key", label: "API Key / Client ID" },
+            { name: "api_secret", label: "API Secret", type: "password" },
+            { name: "redirect_uri", label: "Redirect URI (optional)" },
+            { name: "auth_base_url", label: "Auth Base URL (optional)" },
+            { name: "token_url", label: "Token URL (optional)" },
+            { name: "api_base_url", label: "API Base URL (optional)" },
+            { name: "access_token", label: "Access Token (optional)" },
+          ]}
+        />
       </div>
-      {message && <div className="text-sm text-rose-300">{message}</div>}
+      {message && <div className="text-sm text-emerald-300">{message}</div>}
       <div className="card neutral">
         <div className="section-title">Broker Switcher & Failover</div>
         <div className="flex items-center gap-3 text-sm mb-3">
