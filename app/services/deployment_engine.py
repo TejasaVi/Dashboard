@@ -73,6 +73,20 @@ class DeploymentEngine:
     def _is_amo_mode(self, mode: Dict[str, str]) -> bool:
         return (mode.get("variety") or "").upper() == "AMO"
 
+    def _resolve_amo_test_price(self, metadata: Dict[str, Any], fallback: float = 1.0) -> float:
+        value = metadata.get("amo_test_price") if isinstance(metadata, dict) else None
+        try:
+            parsed = float(value)
+            return parsed if parsed > 0 else fallback
+        except (TypeError, ValueError):
+            return fallback
+
+    def _safe_option_ltp(self, contract: Dict[str, Any]) -> float:
+        try:
+            return float(zerodha_client.get_option_ltp(contract) or 0)
+        except Exception:
+            return 0.0
+
     def _serialize_plan(self, plan: DeploymentPlan) -> Dict[str, Any]:
         data = asdict(plan)
         data["created_at"] = plan.created_at.isoformat()
@@ -100,11 +114,14 @@ class DeploymentEngine:
             option_type=request.option_type,
             expiry_date=request.expiry_date,
         )
-        current_price = zerodha_client.get_option_ltp(contract)
+        current_price = self._safe_option_ltp(contract)
         lot_size = int(contract.get("lot_size") or 1)
 
         if current_price <= 0:
-            raise ValueError("Invalid option LTP for deployment")
+            if self._is_amo_mode(mode):
+                current_price = self._resolve_amo_test_price(metadata)
+            else:
+                raise ValueError("Invalid option LTP for deployment")
 
         max_by_margin = int(margin_available // (current_price * lot_size))
         max_lots = max(0, min(max_by_margin, int(request.lots)))
@@ -129,6 +146,11 @@ class DeploymentEngine:
                 else "Plan created in AMO mode; engine can place market AMO orders for testing"
             ],
         )
+
+        if self._is_amo_mode(mode) and self._safe_option_ltp(contract) <= 0:
+            plan.events.append(
+                f"AMO test mode: using fallback price {current_price} because live LTP is unavailable"
+            )
 
         with self._lock:
             self._plans[plan.plan_id] = plan
@@ -192,14 +214,20 @@ class DeploymentEngine:
                     plan.events.append("Plan expired without first deployment")
                 return
 
-            first_price = zerodha_client.get_option_ltp(
-                zerodha_client.find_option_contract(
-                    index_name=plan.request.index_name,
-                    strike=plan.request.strike,
-                    option_type=plan.request.option_type,
-                    expiry_date=plan.request.expiry_date,
-                )
+            contract = zerodha_client.find_option_contract(
+                index_name=plan.request.index_name,
+                strike=plan.request.strike,
+                option_type=plan.request.option_type,
+                expiry_date=plan.request.expiry_date,
             )
+            first_price = self._safe_option_ltp(contract)
+            if first_price <= 0 and self._is_amo_mode(plan.mode):
+                first_price = plan.initial_price or self._resolve_amo_test_price(plan.metadata)
+                plan.events.append(
+                    f"AMO test mode: using fallback first price {first_price} for order placement"
+                )
+            if first_price <= 0:
+                raise ValueError("Invalid option LTP before first deployment")
             self._place_lots(plan, lots=1, price_hint=first_price)
             plan.first_buy_price = first_price
             plan.first_buy_at = now
@@ -213,14 +241,18 @@ class DeploymentEngine:
         five_min_due = plan.first_buy_at + timedelta(minutes=5)
         ten_min_due = plan.first_buy_at + timedelta(minutes=10)
 
-        current_price = zerodha_client.get_option_ltp(
-            zerodha_client.find_option_contract(
-                index_name=plan.request.index_name,
-                strike=plan.request.strike,
-                option_type=plan.request.option_type,
-                expiry_date=plan.request.expiry_date,
-            )
+        contract = zerodha_client.find_option_contract(
+            index_name=plan.request.index_name,
+            strike=plan.request.strike,
+            option_type=plan.request.option_type,
+            expiry_date=plan.request.expiry_date,
         )
+        current_price = self._safe_option_ltp(contract)
+        if current_price <= 0 and self._is_amo_mode(plan.mode):
+            current_price = plan.average_buy_price or plan.first_buy_price or plan.initial_price
+            plan.events.append(
+                f"AMO test mode: using fallback checkpoint price {current_price} because live LTP is unavailable"
+            )
 
         if plan.status == "WAIT_5M" and now >= five_min_due:
             plan.price_check_5m = current_price
