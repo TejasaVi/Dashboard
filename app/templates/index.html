@@ -263,6 +263,14 @@ function formatIndexValue(value, decimals = 2) {
   return num.toFixed(decimals);
 }
 
+function formatPercent(value, decimals = 2) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  const sign = num > 0 ? "+" : "";
+  return `${sign}${num.toFixed(decimals)}%`;
+}
+
+
 function LiveIndicesCard({indices}) {
   return (
     <div className="card neutral">
@@ -282,6 +290,9 @@ function LiveIndicesCard({indices}) {
         </div>
       </div>
       <div className="mt-4 text-gray-500 text-sm">{indices?.timestamp}</div>
+      <div className="mt-1 text-xs text-gray-400">
+        NSE Capital Market: <span className={indices?.market?.isOpen ? "text-green-400" : "text-amber-400"}>{indices?.market?.status ?? "Unknown"}</span>
+      </div>
     </div>
   );
 }
@@ -1069,6 +1080,9 @@ function MMITab({data, brokerStatus}) {
   const { mmi, indices } = data;
   if (!mmi) return null;
 
+  const marketStates = indices?.marketStates || [];
+  const indexSnapshot = indices?.indexSnapshot || {};
+
   return (
     <div className="space-y-8">
       <LiveIndicesCard indices={indices} />
@@ -1089,6 +1103,42 @@ function MMITab({data, brokerStatus}) {
             <KeyValue label="Strategy" value={mmi?.portfolio_guidance?.action}/>
           </div>
         )}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="card neutral">
+          <div className="section-title">NSE Market Sessions</div>
+          {marketStates.length === 0 ? (
+            <div className="text-sm text-gray-400">Session data unavailable.</div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {marketStates.map((state, idx) => (
+                <div key={`${state?.market || 'market'}-${idx}`} className="flex items-center justify-between border-b border-gray-800 pb-1 last:border-0">
+                  <span className="text-gray-300">{state?.market || 'Unknown'}</span>
+                  <span className={state?.isOpen ? "text-green-400 font-semibold" : "text-amber-400 font-semibold"}>{state?.status || 'Unknown'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card neutral">
+          <div className="section-title">NSE Broader Index Snapshot</div>
+          <div className="space-y-2 text-sm">
+            {Object.entries(indexSnapshot).length === 0 && (
+              <div className="text-gray-400">Snapshot data unavailable.</div>
+            )}
+            {Object.entries(indexSnapshot).map(([name, values]) => (
+              <div key={name} className="border-b border-gray-800 pb-2 last:border-0">
+                <div className="font-semibold text-gray-200">{name}</div>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <KeyValue label="Last" value={formatIndexValue(values?.last)} />
+                  <KeyValue label="Change %" value={formatPercent(values?.percentChange)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
