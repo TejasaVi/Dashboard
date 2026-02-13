@@ -1,7 +1,9 @@
+from importlib import import_module
+
 from flask import Blueprint, jsonify
-from tickersnap.mmi import MarketMoodIndex
 
 mmi_bp = Blueprint("mmi", __name__)
+
 
 def mmi_investment_logic(value):
     if value < 25:
@@ -51,6 +53,7 @@ def mmi_investment_logic(value):
 
 
 def fetch_mmi():
+    MarketMoodIndex = import_module("tickersnap.mmi").MarketMoodIndex
     mmi = MarketMoodIndex()
     current = mmi.get_current_mmi()
 
@@ -65,4 +68,12 @@ def fetch_mmi():
 
 @mmi_bp.route("/mmi", methods=["GET"])
 def mmi_check():
-    return jsonify(fetch_mmi())
+    try:
+        return jsonify(fetch_mmi())
+    except Exception as exc:
+        return jsonify({
+            "value": None,
+            "zone": "Unavailable",
+            "portfolio_guidance": None,
+            "error": f"MMI data unavailable: {exc}",
+        }), 503

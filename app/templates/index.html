@@ -69,6 +69,44 @@ body { background:#0f172a; color:#e2e8f0; }
 
 const { useState, useEffect } = React;
 
+
+async function getBrokerLoginUrl(broker) {
+  const res = await fetch(`/api/${broker}/login-url`);
+  return res.json();
+}
+
+async function getBrokerStatus() {
+  const res = await fetch("/api/brokers/status");
+  return res.json();
+}
+
+async function switchActiveBroker(broker) {
+  const res = await fetch("/api/brokers/switch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ broker }),
+  });
+  return res.json();
+}
+
+async function setBrokerCredentials(broker, payload) {
+  const res = await fetch(`/api/${broker}/credentials`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+async function placeBrokerOrder(order) {
+  const res = await fetch("/api/brokers/place-order", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(order),
+  });
+  return res.json();
+}
+
 const endpoints = {
   pcr: "/api/pcr",
   vix: "/api/vix",
@@ -205,6 +243,43 @@ function LiveIndicesCard({indices}) {
   );
 }
 
+function PlatformStatusCard({ brokerStatus }) {
+  const items = [
+    { key: "zerodha", label: "Zerodha" },
+    { key: "fyers", label: "Fyers" },
+    { key: "stoxkart", label: "Stoxkart" },
+  ];
+
+  return (
+    <div className="card neutral">
+      <div className="section-title">Trading Platform Status</div>
+      <div className="space-y-3">
+        {items.map((item) => {
+          const state = brokerStatus?.brokers?.[item.key] || {};
+          const connected = !!state.connected;
+          return (
+            <div key={item.key} className="flex items-center justify-between text-sm">
+              <span>{item.label}</span>
+              <span className={`font-semibold ${connected ? "text-green-400" : "text-rose-400"}`}>
+                {connected ? "Connected" : "Not Connected"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LiveHeaderRow({ indices, brokerStatus }) {
+  return (
+    <div className="grid md:grid-cols-2 gap-6">
+      <LiveIndicesCard indices={indices} />
+      <PlatformStatusCard brokerStatus={brokerStatus} />
+    </div>
+  );
+}
+
 /* ---------------- MOVING AVERAGES CARDS ---------------- */
 
 function NiftyPriceCard({niftyavgs, isHidden, onToggle}) {
@@ -305,7 +380,7 @@ function ExponentialMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
 
 /* ---------------- DASHBOARD ---------------- */
 
-function DashboardTab({data}) {
+function DashboardTab({data, brokerStatus}) {
   const { pcr, vix, oi, rsi, indices, niftyavgs, macd } = data;
   const hiddenCardsStorageKey = "dashboardHiddenCards";
   const defaultHiddenCards = {
@@ -422,7 +497,7 @@ function DashboardTab({data}) {
 
   return (
     <div className="space-y-8">
-      <LiveIndicesCard indices={indices} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} />
 
       <div className="grid md:grid-cols-3 gap-6">
         {visibleCards.map(card => (
@@ -438,17 +513,30 @@ function DashboardTab({data}) {
 
 /* ---------------- STRATEGY ACCORDION ---------------- */
 
-function StrategyAccordion({ name, data, isOpen, onToggle }) {
+function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selectedBrokers, failoverEnabled }) {
   const [deployed, setDeployed] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [deployMessage, setDeployMessage] = useState("");
 
   if (!data) return null;
 
-  const handleDeploy = (e) => {
+  const handleDeploy = async (e) => {
     e.stopPropagation();
-    console.log(`Executed strategy: ${name} with quantity: ${quantity}`);
-    setDeployed(true);
-    setTimeout(() => setDeployed(false), 1500);
+
+    try {
+      const orders = buildOrders(quantity);
+      for (const order of orders) {
+        const result = await placeBrokerOrder({ ...order, brokers: selectedBrokers, failover_enabled: failoverEnabled });
+        if (!result.success) {
+          throw new Error("Order placement failed on selected platforms");
+        }
+      }
+      setDeployMessage("Successfully deployed");
+      setDeployed(true);
+      setTimeout(() => setDeployed(false), 1500);
+    } catch (err) {
+      setDeployMessage(err.message);
+    }
   };
 
   return (
@@ -484,7 +572,7 @@ function StrategyAccordion({ name, data, isOpen, onToggle }) {
             >
               Deploy
             </button>
-            {deployed && <span className="text-green-400 font-medium">Successfully deployed</span>}
+            {deployMessage && <span className="text-green-400 font-medium">{deployMessage}</span>}
           </div>
         </div>
       )}
@@ -494,22 +582,44 @@ function StrategyAccordion({ name, data, isOpen, onToggle }) {
 
 /* ---------------- ATM OPTIONS CARD ---------------- */
 
-function ATMOptionsCard({ ce, pe }) {
+function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled }) {
   const [ceQty, setCeQty] = useState(1);
   const [peQty, setPeQty] = useState(1);
-  const [ceDeployed, setCeDeployed] = useState(false);
-  const [peDeployed, setPeDeployed] = useState(false);
+  const [ceMessage, setCeMessage] = useState("");
+  const [peMessage, setPeMessage] = useState("");
 
-  const handleCeDeploy = () => {
-    console.log("Deployed CE strike", { ce, ceQty });
-    setCeDeployed(true);
-    setTimeout(() => setCeDeployed(false), 1500);
+  const handleCeDeploy = async () => {
+    try {
+      const result = await placeBrokerOrder({
+        index_name: "NIFTY",
+        strike: ce,
+        option_type: "CE",
+        quantity: ceQty,
+        transaction_type: "BUY",
+        brokers: selectedBrokers,
+        failover_enabled: failoverEnabled,
+      });
+      setCeMessage(result.success ? "Order placed on selected platform(s)" : (result.error || "Order failed"));
+    } catch (err) {
+      setCeMessage(err.message);
+    }
   };
 
-  const handlePeDeploy = () => {
-    console.log("Deployed PE strike", { pe, peQty });
-    setPeDeployed(true);
-    setTimeout(() => setPeDeployed(false), 1500);
+  const handlePeDeploy = async () => {
+    try {
+      const result = await placeBrokerOrder({
+        index_name: "NIFTY",
+        strike: pe,
+        option_type: "PE",
+        quantity: peQty,
+        transaction_type: "BUY",
+        brokers: selectedBrokers,
+        failover_enabled: failoverEnabled,
+      });
+      setPeMessage(result.success ? "Order placed on selected platform(s)" : (result.error || "Order failed"));
+    } catch (err) {
+      setPeMessage(err.message);
+    }
   };
 
   return (
@@ -517,8 +627,6 @@ function ATMOptionsCard({ ce, pe }) {
       <div className="section-title">ATM Options</div>
 
       <div className="grid grid-cols-1 gap-6 mt-2">
-
-        {/* CE Strike */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
@@ -526,30 +634,17 @@ function ATMOptionsCard({ ce, pe }) {
               <div className="text-sm text-gray-200">{ce ?? "-"}</div>
             </div>
             <div className="flex gap-2">
-              <select
-                className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
-                value={ceQty}
-                onChange={(e) => setCeQty(Number(e.target.value))}
-              >
-                {[...Array(100)].map((_, i) => (
-                  <option key={i+1} value={i+1}>{i+1}</option>
-                ))}
+              <select className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" value={ceQty} onChange={(e) => setCeQty(Number(e.target.value))}>
+                {[...Array(100)].map((_, i) => (<option key={i+1} value={i+1}>{i+1}</option>))}
               </select>
-              <button
-                onClick={handleCeDeploy}
-                className={`px-4 py-2 rounded-md text-white ${ceDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
-              >
-                Deploy CE
-              </button>
-              {ceDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+              <button onClick={handleCeDeploy} className="px-4 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500">Deploy CE</button>
             </div>
           </div>
+          {ceMessage && <div className="text-sm text-cyan-300">{ceMessage}</div>}
         </div>
 
-        {/* Separator Line */}
         <div className="border-t border-gray-600 mx-4"></div>
 
-        {/* PE Strike */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
@@ -557,26 +652,14 @@ function ATMOptionsCard({ ce, pe }) {
               <div className="text-sm text-gray-200">{pe ?? "-"}</div>
             </div>
             <div className="flex gap-2">
-              <select
-                className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
-                value={peQty}
-                onChange={(e) => setPeQty(Number(e.target.value))}
-              >
-                {[...Array(100)].map((_, i) => (
-                  <option key={i+1} value={i+1}>{i+1}</option>
-                ))}
+              <select className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" value={peQty} onChange={(e) => setPeQty(Number(e.target.value))}>
+                {[...Array(100)].map((_, i) => (<option key={i+1} value={i+1}>{i+1}</option>))}
               </select>
-              <button
-                onClick={handlePeDeploy}
-                className={`px-4 py-2 rounded-md text-white ${peDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
-              >
-                Deploy PE
-              </button>
-              {peDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+              <button onClick={handlePeDeploy} className="px-4 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500">Deploy PE</button>
             </div>
           </div>
+          {peMessage && <div className="text-sm text-cyan-300">{peMessage}</div>}
         </div>
-
       </div>
     </div>
   );
@@ -584,7 +667,7 @@ function ATMOptionsCard({ ce, pe }) {
 
 /* ---------------- OPTIONS ENGINE TAB ---------------- */
 
-function OptionsEngineTab({data}) {
+function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}) {
   const { bias, indices } = data;
   const [openStrategy, setOpenStrategy] = useState(null);
 
@@ -592,9 +675,31 @@ function OptionsEngineTab({data}) {
 
   const handleToggle = (name) => setOpenStrategy(openStrategy === name ? null : name);
 
+  const strategyOrderBuilders = {
+    "Iron Condor": (quantity) => [
+      { index_name: "NIFTY", strike: bias?.strikes?.iron_condor?.sell_ce, option_type: "CE", transaction_type: "SELL", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.iron_condor?.buy_ce, option_type: "CE", transaction_type: "BUY", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.iron_condor?.sell_pe, option_type: "PE", transaction_type: "SELL", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.iron_condor?.buy_pe, option_type: "PE", transaction_type: "BUY", quantity },
+    ].filter((o) => o.strike),
+    "Calendar": (quantity) => [
+      { index_name: "NIFTY", strike: bias?.strikes?.calendar?.ce_atm, option_type: "CE", transaction_type: "BUY", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.calendar?.pe_atm, option_type: "PE", transaction_type: "BUY", quantity },
+    ].filter((o) => o.strike),
+    "Call Spread": (quantity) => [
+      { index_name: "NIFTY", strike: bias?.strikes?.spread_ce?.buy, option_type: "CE", transaction_type: "BUY", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.spread_ce?.sell, option_type: "CE", transaction_type: "SELL", quantity },
+    ].filter((o) => o.strike),
+    "Put Spread": (quantity) => [
+      { index_name: "NIFTY", strike: bias?.strikes?.spread_pe?.buy, option_type: "PE", transaction_type: "BUY", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.spread_pe?.sell, option_type: "PE", transaction_type: "SELL", quantity },
+    ].filter((o) => o.strike),
+    "Butterfly": () => [],
+  };
+
   return (
     <div className="space-y-8">
-      <LiveIndicesCard indices={indices} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} />
 
       <div className={getCardClass(bias?.bias)}>
         <div className="section-title">Options Strategy Engine</div>
@@ -608,49 +713,148 @@ function OptionsEngineTab({data}) {
         </div>
       </div>
 
-      <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} />
+      <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} />
 
       <div className="card neutral">
         <div className="section-title">Strategy List</div>
 
-        <StrategyAccordion
-          name="Butterfly"
-          data={bias?.strikes?.butterfly}
-          isOpen={openStrategy === "Butterfly"}
-          onToggle={handleToggle}
-        />
-        <StrategyAccordion
-          name="Iron Condor"
-          data={bias?.strikes?.iron_condor}
-          isOpen={openStrategy === "Iron Condor"}
-          onToggle={handleToggle}
-        />
-        <StrategyAccordion
-          name="Calendar"
-          data={bias?.strikes?.calendar}
-          isOpen={openStrategy === "Calendar"}
-          onToggle={handleToggle}
-        />
-        <StrategyAccordion
-          name="Call Spread"
-          data={bias?.strikes?.spread_ce}
-          isOpen={openStrategy === "Call Spread"}
-          onToggle={handleToggle}
-        />
-        <StrategyAccordion
-          name="Put Spread"
-          data={bias?.strikes?.spread_pe}
-          isOpen={openStrategy === "Put Spread"}
-          onToggle={handleToggle}
-        />
+        <StrategyAccordion name="Butterfly" data={bias?.strikes?.butterfly} isOpen={openStrategy === "Butterfly"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Butterfly"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} />
+        <StrategyAccordion name="Iron Condor" data={bias?.strikes?.iron_condor} isOpen={openStrategy === "Iron Condor"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Iron Condor"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} />
+        <StrategyAccordion name="Calendar" data={bias?.strikes?.calendar} isOpen={openStrategy === "Calendar"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Calendar"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} />
+        <StrategyAccordion name="Call Spread" data={bias?.strikes?.spread_ce} isOpen={openStrategy === "Call Spread"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Call Spread"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} />
+        <StrategyAccordion name="Put Spread" data={bias?.strikes?.spread_pe} isOpen={openStrategy === "Put Spread"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Put Spread"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} />
       </div>
+    </div>
+  );
+}
+
+function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, activeBroker, setActiveBroker, failoverEnabled, setFailoverEnabled }) {
+  const [message, setMessage] = useState("");
+  const [creds, setCreds] = useState({
+    zerodha: { api_key: "", api_secret: "" },
+    fyers: { client_id: "", secret_key: "", redirect_uri: "" },
+    stoxkart: { client_id: "", secret_key: "", auth_base_url: "", redirect_uri: "", token_url: "", api_base_url: "" },
+  });
+
+  const toggleBroker = (broker) => {
+    setSelectedBrokers((prev) => prev.includes(broker) ? prev.filter((b) => b !== broker) : [...prev, broker]);
+  };
+
+  const setCredField = (broker, key, value) => {
+    setCreds((prev) => ({ ...prev, [broker]: { ...prev[broker], [key]: value } }));
+  };
+
+  const saveCredentials = async (broker) => {
+    const res = await setBrokerCredentials(broker, creds[broker]);
+    if (res.success) {
+      setMessage(`${broker} credentials saved`);
+      refreshBrokerStatus();
+    } else {
+      setMessage(res.error || `Unable to save ${broker} credentials`);
+    }
+  };
+
+  const changeActive = async (broker) => {
+    const res = await switchActiveBroker(broker);
+    if (res.success) {
+      setActiveBroker(res.active_broker);
+      refreshBrokerStatus();
+    } else {
+      setMessage(res.error || "Unable to switch broker");
+    }
+  };
+
+  const connect = async (broker) => {
+    const json = await getBrokerLoginUrl(broker);
+    if (json.login_url) {
+      window.location.href = json.login_url;
+      return;
+    }
+    setMessage(json.error || `Unable to connect ${broker}`);
+  };
+
+  useEffect(() => {
+    refreshBrokerStatus();
+  }, []);
+
+  const BrokerConnectionCard = ({ broker, title }) => {
+    const state = brokerStatus?.brokers?.[broker] || {};
+    const c = creds[broker] || {};
+    return (
+      <div className="card neutral">
+        <div className="section-title">{title}</div>
+        <div className="space-y-2 text-sm mb-3">
+          <div>Configured: <span className="font-semibold">{state.configured ? "Yes" : "No"}</span></div>
+          <div>Connected: <span className="font-semibold">{state.connected ? "Yes" : "No"}</span></div>
+        </div>
+
+        {broker === "zerodha" && (
+          <div className="space-y-2 mb-3">
+            <input className="w-full px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" placeholder="API Key" value={c.api_key || ""} onChange={(e)=>setCredField(broker, "api_key", e.target.value)} />
+            <input className="w-full px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" placeholder="API Secret" value={c.api_secret || ""} onChange={(e)=>setCredField(broker, "api_secret", e.target.value)} />
+          </div>
+        )}
+
+        {broker === "fyers" && (
+          <div className="space-y-2 mb-3">
+            <input className="w-full px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" placeholder="Client ID" value={c.client_id || ""} onChange={(e)=>setCredField(broker, "client_id", e.target.value)} />
+            <input className="w-full px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" placeholder="Secret Key" value={c.secret_key || ""} onChange={(e)=>setCredField(broker, "secret_key", e.target.value)} />
+            <input className="w-full px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" placeholder="Redirect URI (optional)" value={c.redirect_uri || ""} onChange={(e)=>setCredField(broker, "redirect_uri", e.target.value)} />
+          </div>
+        )}
+
+        {broker === "stoxkart" && (
+          <div className="space-y-2 mb-3">
+            <input className="w-full px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" placeholder="Client ID" value={c.client_id || ""} onChange={(e)=>setCredField(broker, "client_id", e.target.value)} />
+            <input className="w-full px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" placeholder="Secret Key" value={c.secret_key || ""} onChange={(e)=>setCredField(broker, "secret_key", e.target.value)} />
+            <input className="w-full px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" placeholder="Auth Base URL" value={c.auth_base_url || ""} onChange={(e)=>setCredField(broker, "auth_base_url", e.target.value)} />
+            <input className="w-full px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" placeholder="Redirect URI (optional)" value={c.redirect_uri || ""} onChange={(e)=>setCredField(broker, "redirect_uri", e.target.value)} />
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <button onClick={() => saveCredentials(broker)} className="px-3 py-2 rounded-md text-white bg-gray-700 hover:bg-gray-600">Save Keys</button>
+          <button onClick={() => connect(broker)} className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500">Connect</button>
+          <label className="flex items-center gap-2 text-sm ml-auto">
+            <input type="checkbox" checked={selectedBrokers.includes(broker)} onChange={() => toggleBroker(broker)} />
+            Use for deploy
+          </label>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid md:grid-cols-3 gap-6">
+        <BrokerConnectionCard broker="zerodha" title="Zerodha Connection" />
+        <BrokerConnectionCard broker="fyers" title="Fyers Connection" />
+        <BrokerConnectionCard broker="stoxkart" title="Stoxkart Connection" />
+      </div>
+      {message && <div className="text-sm text-rose-300">{message}</div>}
+      <div className="card neutral">
+        <div className="section-title">Broker Switcher & Failover</div>
+        <div className="flex items-center gap-3 text-sm mb-3">
+          <span>Active Broker:</span>
+          <select className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" value={activeBroker} onChange={(e) => changeActive(e.target.value)}>
+            <option value="zerodha">Zerodha</option>
+            <option value="fyers">Fyers</option>
+            <option value="stoxkart">Stoxkart</option>
+          </select>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={failoverEnabled} onChange={(e) => setFailoverEnabled(e.target.checked)} />
+          Enable failover trading (try next selected broker if first fails)
+        </label>
+      </div>
+      <div className="text-sm text-gray-300">Selected platform(s) for order execution: {selectedBrokers.join(", ") || "None"}</div>
     </div>
   );
 }
 
 /* ---------------- MMI ---------------- */
 
-function MMITab({data}) {
+function MMITab({data, brokerStatus}) {
   const { mmi, indices } = data;
   if (!mmi) return null;
 
@@ -694,21 +898,39 @@ function FiiDiiTab() {
 
 function App() {
   const { data } = useAPI();
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState("brokers");
+  const [selectedBrokers, setSelectedBrokers] = useState(["zerodha"]);
+  const [brokerStatus, setBrokerStatus] = useState({});
+  const [activeBroker, setActiveBroker] = useState("zerodha");
+  const [failoverEnabled, setFailoverEnabled] = useState(true);
+
+  const refreshBrokerStatus = async () => {
+    try {
+      const status = await getBrokerStatus();
+      setBrokerStatus(status);
+      if (status?.active_broker) setActiveBroker(status.active_broker);
+    } catch {}
+  };
+
+  useEffect(() => {
+    refreshBrokerStatus();
+  }, []);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
 
       <div className="flex border-b border-gray-700 mb-6">
+        <div className={`tab ${tab==="brokers"?"tab-active":""}`} onClick={()=>setTab("brokers")}>Brokers</div>
         <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
         <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
         <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
         <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
       </div>
 
-      {tab==="dashboard" && <DashboardTab data={data} />}
-      {tab==="options" && <OptionsEngineTab data={data} />}
-      {tab==="mmi" && <MMITab data={data} />}
+      {tab==="brokers" && <BrokersTab selectedBrokers={selectedBrokers} setSelectedBrokers={setSelectedBrokers} brokerStatus={brokerStatus} refreshBrokerStatus={refreshBrokerStatus} activeBroker={activeBroker} setActiveBroker={setActiveBroker} failoverEnabled={failoverEnabled} setFailoverEnabled={setFailoverEnabled} />}
+      {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} />}
+      {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} />}
+      {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} />}
       {tab==="fii-dii" && <FiiDiiTab />}
 
     </div>

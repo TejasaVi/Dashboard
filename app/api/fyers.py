@@ -1,0 +1,63 @@
+from flask import Blueprint, jsonify, redirect, request
+
+from app.services.fyers import fyers_client
+
+fyers_bp = Blueprint("fyers", __name__)
+
+
+@fyers_bp.route("/fyers/status", methods=["GET"])
+def fyers_status():
+    if not fyers_client.is_configured:
+        msg = "Set FYERS_CLIENT_ID, FYERS_SECRET_KEY, FYERS_REDIRECT_URI"
+        if not fyers_client.sdk_available:
+            msg = "fyers_apiv3 SDK missing. Install with: pip install fyers-apiv3"
+        return jsonify({"configured": False, "connected": False, "message": msg})
+
+    try:
+        profile = fyers_client.profile() if fyers_client.is_connected else None
+    except Exception:
+        profile = None
+
+    return jsonify({"configured": True, "connected": fyers_client.is_connected, "profile": profile})
+
+
+@fyers_bp.route("/fyers/credentials", methods=["POST"])
+def fyers_credentials():
+    payload = request.get_json(silent=True) or {}
+    client_id = payload.get("client_id", "")
+    secret_key = payload.get("secret_key", "")
+    redirect_uri = payload.get("redirect_uri")
+    if not client_id or not secret_key:
+        return jsonify({"success": False, "error": "client_id and secret_key are required"}), 400
+    fyers_client.update_credentials(client_id=client_id, secret_key=secret_key, redirect_uri=redirect_uri)
+    return jsonify({"success": True})
+
+
+@fyers_bp.route("/fyers/login-url", methods=["GET"])
+def fyers_login_url():
+    try:
+        return jsonify({"login_url": fyers_client.login_url()})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@fyers_bp.route("/fyers/callback", methods=["GET"])
+def fyers_callback():
+    auth_code = request.args.get("auth_code")
+    if not auth_code:
+        return "No auth_code received", 400
+
+    try:
+        fyers_client.save_session(auth_code)
+    except Exception as exc:
+        return f"Error while generating session: {exc}", 400
+
+    return redirect("/?fyers=connected")
+
+
+@fyers_bp.route("/fyers/profile", methods=["GET"])
+def fyers_profile():
+    try:
+        return jsonify(fyers_client.profile())
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
