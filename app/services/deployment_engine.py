@@ -39,6 +39,8 @@ class DeploymentPlan:
     first_buy_at: Optional[datetime] = None
     price_check_5m: Optional[float] = None
     price_check_10m: Optional[float] = None
+    highest_price_seen: Optional[float] = None
+    trailing_stop_price: Optional[float] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     orders: List[Dict[str, Any]] = field(default_factory=list)
     events: List[str] = field(default_factory=list)
@@ -80,6 +82,14 @@ class DeploymentEngine:
             return parsed if parsed > 0 else fallback
         except (TypeError, ValueError):
             return fallback
+
+
+    def _resolve_trailing_stop_pct(self, metadata: Dict[str, Any]) -> float:
+        try:
+            pct = float((metadata or {}).get("trailing_stop_pct", 0))
+            return pct if pct > 0 else 0.0
+        except (TypeError, ValueError):
+            return 0.0
 
     def _safe_option_ltp(self, contract: Dict[str, Any]) -> float:
         try:
@@ -231,6 +241,7 @@ class DeploymentEngine:
             self._place_lots(plan, lots=1, price_hint=first_price)
             plan.first_buy_price = first_price
             plan.first_buy_at = now
+            plan.highest_price_seen = first_price
             plan.status = "WAIT_5M"
             plan.events.append("First lot deployed; waiting for 5-minute checkpoint")
             return
@@ -283,6 +294,22 @@ class DeploymentEngine:
             else:
                 plan.events.append("10m: position retained")
                 plan.status = "ACTIVE"
+
+        if plan.status == "ACTIVE" and plan.bought_lots > 0:
+            trailing_pct = self._resolve_trailing_stop_pct(plan.metadata)
+            if trailing_pct > 0 and current_price > 0:
+                previous_high = plan.highest_price_seen or current_price
+                plan.highest_price_seen = max(previous_high, current_price)
+                plan.trailing_stop_price = plan.highest_price_seen * (1 - trailing_pct / 100)
+                if current_price <= plan.trailing_stop_price:
+                    self._place_lots(
+                        plan,
+                        lots=plan.bought_lots,
+                        price_hint=current_price,
+                        tx_type="SELL" if plan.request.transaction_type.upper() == "BUY" else "BUY",
+                    )
+                    plan.events.append(f"Trailing stop hit at {current_price:.2f}; exited position")
+                    plan.status = "EXITED"
 
     def process(self, plan_id: Optional[str] = None) -> Dict[str, Any]:
         now = self._ist_now()
