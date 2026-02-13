@@ -98,6 +98,29 @@ async function placeBrokerOrder(order) {
   return res.json();
 }
 
+async function deployWithEngine(order) {
+  const res = await fetch("/api/brokers/deploy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(order),
+  });
+  return res.json();
+}
+
+async function processDeploymentEngine(planId) {
+  const res = await fetch("/api/brokers/deploy/process", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(planId ? { plan_id: planId } : {}),
+  });
+  return res.json();
+}
+
+async function getDeploymentStatus(planId) {
+  const res = await fetch(`/api/brokers/deploy/${planId}`);
+  return res.json();
+}
+
 async function configureBrokerCredentials(payload) {
   const res = await fetch("/api/brokers/configure", {
     method: "POST",
@@ -537,26 +560,60 @@ function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selected
   const [deployed, setDeployed] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [deployMessage, setDeployMessage] = useState("");
+  const [deploymentStats, setDeploymentStats] = useState({ bought: 0, pending: 0 });
+  const [activePlanIds, setActivePlanIds] = useState([]);
 
   if (!data) return null;
+
+  useEffect(() => {
+    if (activePlanIds.length === 0) return;
+
+    const interval = setInterval(async () => {
+      try {
+        let bought = 0;
+        let pending = 0;
+        for (const planId of activePlanIds) {
+          await processDeploymentEngine(planId);
+          const status = await getDeploymentStatus(planId);
+          const plan = status?.plan || {};
+          bought += Number(plan.bought_lots || 0);
+          pending += Number(plan.pending_lots || 0);
+        }
+        setDeploymentStats({ bought, pending });
+      } catch {
+        // keep UI quiet during polling failures
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [activePlanIds]);
 
   const handleDeploy = async (e) => {
     e.stopPropagation();
 
     try {
       const orders = buildOrders(quantity);
+      let bought = 0;
+      let pending = 0;
+      const createdPlanIds = [];
       for (const order of orders) {
-        const result = await placeBrokerOrder({
+        const result = await deployWithEngine({
           ...order,
           brokers: selectedBrokers,
           failover_enabled: failoverEnabled,
           metadata: { ...(order.metadata || {}), expiry_date: expiryDate },
         });
         if (!result.success) {
-          throw new Error("Order placement failed on selected platforms");
+          throw new Error(result.error || "Deployment creation failed");
         }
+        const plan = result?.plan || {};
+        createdPlanIds.push(plan.plan_id);
+        bought += Number(plan.bought_lots || 0);
+        pending += Number(plan.pending_lots || 0);
       }
-      setDeployMessage("Successfully deployed");
+      setActivePlanIds(createdPlanIds.filter(Boolean));
+      setDeploymentStats({ bought, pending });
+      setDeployMessage("Deployment queued (engine will process in ticks)");
       setDeployed(true);
       setTimeout(() => setDeployed(false), 1500);
     } catch (err) {
@@ -599,6 +656,7 @@ function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selected
             </button>
             {deployMessage && <span className="text-green-400 font-medium">{deployMessage}</span>}
           </div>
+          <div className="text-sm text-cyan-300">Bought lots: {deploymentStats.bought} | Pending lots: {deploymentStats.pending}</div>
         </div>
       )}
     </div>
@@ -612,10 +670,44 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
   const [peQty, setPeQty] = useState(1);
   const [ceMessage, setCeMessage] = useState("");
   const [peMessage, setPeMessage] = useState("");
+  const [cePlanId, setCePlanId] = useState("");
+  const [pePlanId, setPePlanId] = useState("");
+  const [ceStats, setCeStats] = useState({ bought: 0, pending: 0 });
+  const [peStats, setPeStats] = useState({ bought: 0, pending: 0 });
+
+  useEffect(() => {
+    if (!cePlanId) return;
+    const interval = setInterval(async () => {
+      try {
+        await processDeploymentEngine(cePlanId);
+        const status = await getDeploymentStatus(cePlanId);
+        const plan = status?.plan || {};
+        setCeStats({ bought: Number(plan.bought_lots || 0), pending: Number(plan.pending_lots || 0) });
+      } catch {
+        // ignore transient errors
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [cePlanId]);
+
+  useEffect(() => {
+    if (!pePlanId) return;
+    const interval = setInterval(async () => {
+      try {
+        await processDeploymentEngine(pePlanId);
+        const status = await getDeploymentStatus(pePlanId);
+        const plan = status?.plan || {};
+        setPeStats({ bought: Number(plan.bought_lots || 0), pending: Number(plan.pending_lots || 0) });
+      } catch {
+        // ignore transient errors
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [pePlanId]);
 
   const handleCeDeploy = async () => {
     try {
-      const result = await placeBrokerOrder({
+      const result = await deployWithEngine({
         index_name: "NIFTY",
         strike: ce,
         option_type: "CE",
@@ -625,7 +717,10 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
         failover_enabled: failoverEnabled,
         metadata: { expiry_date: expiryDate },
       });
-      setCeMessage(result.success ? "Order placed on selected platform(s)" : (result.error || "Order failed"));
+      const plan = result?.plan || {};
+      setCePlanId(plan.plan_id || "");
+      setCeStats({ bought: Number(plan.bought_lots || 0), pending: Number(plan.pending_lots || 0) });
+      setCeMessage(result.success ? "Deployment queued (engine tick pending)" : (result.error || "Deployment failed"));
     } catch (err) {
       setCeMessage(err.message);
     }
@@ -633,7 +728,7 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
 
   const handlePeDeploy = async () => {
     try {
-      const result = await placeBrokerOrder({
+      const result = await deployWithEngine({
         index_name: "NIFTY",
         strike: pe,
         option_type: "PE",
@@ -643,7 +738,10 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
         failover_enabled: failoverEnabled,
         metadata: { expiry_date: expiryDate },
       });
-      setPeMessage(result.success ? "Order placed on selected platform(s)" : (result.error || "Order failed"));
+      const plan = result?.plan || {};
+      setPePlanId(plan.plan_id || "");
+      setPeStats({ bought: Number(plan.bought_lots || 0), pending: Number(plan.pending_lots || 0) });
+      setPeMessage(result.success ? "Deployment queued (engine tick pending)" : (result.error || "Deployment failed"));
     } catch (err) {
       setPeMessage(err.message);
     }
@@ -677,6 +775,7 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
             </div>
           </div>
           {ceMessage && <div className="text-sm text-cyan-300">{ceMessage}</div>}
+          <div className="text-xs text-cyan-200">Bought lots: {ceStats.bought} | Pending lots: {ceStats.pending}</div>
         </div>
 
         <div className="border-t border-gray-600 mx-4"></div>
@@ -695,6 +794,7 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
             </div>
           </div>
           {peMessage && <div className="text-sm text-cyan-300">{peMessage}</div>}
+          <div className="text-xs text-cyan-200">Bought lots: {peStats.bought} | Pending lots: {peStats.pending}</div>
         </div>
       </div>
     </div>
