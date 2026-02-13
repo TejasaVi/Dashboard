@@ -91,7 +91,9 @@ function getCardClass(text) {
   if (t.includes("complacent")) return "card bullish";
   if (t.includes("stable")) return "card bullish";
   if (t.includes("nervous")) return "card bearish";
-  
+  if (t.includes("strong buy")) return "card bullish";
+  if (t.includes("strong sell")) return "card bearish";
+  if (t.includes("buy")) return "card bullish";
   return "card neutral";
 }
 
