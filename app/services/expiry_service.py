@@ -8,7 +8,7 @@ from pnsea.nse import NSE
 
 def get_index_expiries(symbol: str = "NIFTY") -> List[str]:
     nse = NSE()
-    expiries = nse.indices_options.expiry_dates(symbol.upper())
+    expiries = nse.options.expiry_dates(symbol.upper())
     return sorted({_normalize_expiry(item) for item in expiries if item}, key=_date_sort_key)
 
 
