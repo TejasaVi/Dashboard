@@ -270,6 +270,13 @@ function formatPercent(value, decimals = 2) {
   return `${sign}${num.toFixed(decimals)}%`;
 }
 
+function formatCurrency(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  const sign = num > 0 ? "+" : "";
+  return `${sign}₹${num.toFixed(2)}`;
+}
+
 
 function LiveIndicesCard({indices}) {
   return (
@@ -567,7 +574,7 @@ function DashboardTab({data, brokerStatus}) {
 
 /* ---------------- STRATEGY ACCORDION ---------------- */
 
-function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selectedBrokers, failoverEnabled, expiryDate }) {
+function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selectedBrokers, failoverEnabled, expiryDate, onTradeExecuted }) {
   const [deployed, setDeployed] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [deployMessage, setDeployMessage] = useState("");
@@ -618,6 +625,19 @@ function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selected
           throw new Error(result.error || "Deployment creation failed");
         }
         const plan = result?.plan || {};
+        onTradeExecuted?.({
+          strategy: name,
+          indexName: order.index_name,
+          optionType: order.option_type,
+          strike: order.strike,
+          quantity: order.quantity,
+          transactionType: order.transaction_type,
+          brokers: selectedBrokers,
+          status: "queued",
+          planId: plan.plan_id || "",
+          message: "Plan created",
+          profitLoss: null,
+        });
         createdPlanIds.push(plan.plan_id);
         bought += Number(plan.bought_lots || 0);
         pending += Number(plan.pending_lots || 0);
@@ -676,7 +696,7 @@ function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selected
 
 /* ---------------- ATM OPTIONS CARD ---------------- */
 
-function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, expiries, onExpiryChange }) {
+function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, expiries, onExpiryChange, onTradeExecuted }) {
   const [ceQty, setCeQty] = useState(1);
   const [peQty, setPeQty] = useState(1);
   const [ceMessage, setCeMessage] = useState("");
@@ -729,6 +749,21 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
         metadata: { expiry_date: expiryDate },
       });
       const plan = result?.plan || {};
+      if (result.success) {
+        onTradeExecuted?.({
+          strategy: "ATM CE",
+          indexName: "NIFTY",
+          optionType: "CE",
+          strike: ce,
+          quantity: ceQty,
+          transactionType: "BUY",
+          brokers: selectedBrokers,
+          status: "queued",
+          planId: plan.plan_id || "",
+          message: "Plan created",
+          profitLoss: null,
+        });
+      }
       setCePlanId(plan.plan_id || "");
       setCeStats({ bought: Number(plan.bought_lots || 0), pending: Number(plan.pending_lots || 0) });
       setCeMessage(result.success ? "Deployment queued (engine tick pending)" : (result.error || "Deployment failed"));
@@ -750,6 +785,21 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
         metadata: { expiry_date: expiryDate },
       });
       const plan = result?.plan || {};
+      if (result.success) {
+        onTradeExecuted?.({
+          strategy: "ATM PE",
+          indexName: "NIFTY",
+          optionType: "PE",
+          strike: pe,
+          quantity: peQty,
+          transactionType: "BUY",
+          brokers: selectedBrokers,
+          status: "queued",
+          planId: plan.plan_id || "",
+          message: "Plan created",
+          profitLoss: null,
+        });
+      }
       setPePlanId(plan.plan_id || "");
       setPeStats({ bought: Number(plan.bought_lots || 0), pending: Number(plan.pending_lots || 0) });
       setPeMessage(result.success ? "Deployment queued (engine tick pending)" : (result.error || "Deployment failed"));
@@ -814,7 +864,7 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
 
 /* ---------------- OPTIONS ENGINE TAB ---------------- */
 
-function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}) {
+function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled, onTradeExecuted}) {
   const { bias, indices } = data;
   const [openStrategy, setOpenStrategy] = useState(null);
   const [expiries, setExpiries] = useState([]);
@@ -877,7 +927,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}
         </div>
       </div>
 
-      <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} expiries={expiries} onExpiryChange={setSelectedExpiry} />
+      <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} expiries={expiries} onExpiryChange={setSelectedExpiry} onTradeExecuted={onTradeExecuted} />
 
       <div className="card neutral">
         <div className="section-title">Strategy List</div>
@@ -893,11 +943,100 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}
           </select>
         </div>
 
-        <StrategyAccordion name="Butterfly" data={bias?.strikes?.butterfly} isOpen={openStrategy === "Butterfly"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Butterfly"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} />
-        <StrategyAccordion name="Iron Condor" data={bias?.strikes?.iron_condor} isOpen={openStrategy === "Iron Condor"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Iron Condor"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} />
-        <StrategyAccordion name="Calendar" data={bias?.strikes?.calendar} isOpen={openStrategy === "Calendar"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Calendar"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} />
-        <StrategyAccordion name="Call Spread" data={bias?.strikes?.spread_ce} isOpen={openStrategy === "Call Spread"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Call Spread"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} />
-        <StrategyAccordion name="Put Spread" data={bias?.strikes?.spread_pe} isOpen={openStrategy === "Put Spread"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Put Spread"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} />
+        <StrategyAccordion name="Butterfly" data={bias?.strikes?.butterfly} isOpen={openStrategy === "Butterfly"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Butterfly"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} onTradeExecuted={onTradeExecuted} />
+        <StrategyAccordion name="Iron Condor" data={bias?.strikes?.iron_condor} isOpen={openStrategy === "Iron Condor"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Iron Condor"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} onTradeExecuted={onTradeExecuted} />
+        <StrategyAccordion name="Calendar" data={bias?.strikes?.calendar} isOpen={openStrategy === "Calendar"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Calendar"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} onTradeExecuted={onTradeExecuted} />
+        <StrategyAccordion name="Call Spread" data={bias?.strikes?.spread_ce} isOpen={openStrategy === "Call Spread"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Call Spread"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} onTradeExecuted={onTradeExecuted} />
+        <StrategyAccordion name="Put Spread" data={bias?.strikes?.spread_pe} isOpen={openStrategy === "Put Spread"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Put Spread"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} onTradeExecuted={onTradeExecuted} />
+      </div>
+    </div>
+  );
+}
+
+function TradeAnalyticsTab({ tradeLog, setTradeLog }) {
+  const tradesWithPnl = tradeLog.filter((trade) => trade.profitLoss !== null && Number.isFinite(Number(trade.profitLoss)));
+  const winningTrades = tradesWithPnl.filter((trade) => Number(trade.profitLoss) > 0);
+  const losingTrades = tradesWithPnl.filter((trade) => Number(trade.profitLoss) < 0);
+  const winRate = tradesWithPnl.length > 0 ? (winningTrades.length / tradesWithPnl.length) * 100 : 0;
+  const avgProfit = winningTrades.length > 0
+    ? winningTrades.reduce((sum, trade) => sum + Number(trade.profitLoss), 0) / winningTrades.length
+    : 0;
+  const avgLoss = losingTrades.length > 0
+    ? losingTrades.reduce((sum, trade) => sum + Number(trade.profitLoss), 0) / losingTrades.length
+    : 0;
+
+  const updateProfitLoss = (id, value) => {
+    const normalized = (value || "").trim();
+    const pnl = normalized === "" ? null : Number(normalized);
+    setTradeLog((prev) => prev.map((trade) => (
+      trade.id === id
+        ? { ...trade, profitLoss: pnl === null || Number.isFinite(pnl) ? pnl : trade.profitLoss }
+        : trade
+    )));
+  };
+
+  const clearTradeLog = () => setTradeLog([]);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid md:grid-cols-3 gap-6">
+        <div className="card neutral">
+          <div className="section-title">Trade Analytics</div>
+          <KeyValue label="Total Logged Trades" value={tradeLog.length} />
+          <KeyValue label="Trades with P/L" value={tradesWithPnl.length} />
+          <KeyValue label="Win Rate" value={`${winRate.toFixed(2)}%`} />
+          <KeyValue label="Avg Profit" value={formatCurrency(avgProfit)} />
+          <KeyValue label="Avg Loss" value={formatCurrency(avgLoss)} />
+        </div>
+      </div>
+
+      <div className="card neutral">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <div className="section-title !mb-0">Recent Executed Trades Log</div>
+          <button onClick={clearTradeLog} className="px-3 py-1 rounded-md text-xs text-white bg-rose-700 hover:bg-rose-600">Clear Log</button>
+        </div>
+        {tradeLog.length === 0 ? (
+          <div className="text-sm text-gray-400">No executed trades yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-gray-300 border-b border-gray-700">
+                  <th className="text-left py-2">Time</th>
+                  <th className="text-left py-2">Strategy</th>
+                  <th className="text-left py-2">Leg</th>
+                  <th className="text-left py-2">Qty</th>
+                  <th className="text-left py-2">Status</th>
+                  <th className="text-left py-2">Brokers</th>
+                  <th className="text-left py-2">P/L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tradeLog.map((trade) => (
+                  <tr key={trade.id} className="border-b border-gray-800">
+                    <td className="py-2 pr-3 whitespace-nowrap">{new Date(trade.timestamp).toLocaleString()}</td>
+                    <td className="py-2 pr-3">{trade.strategy}</td>
+                    <td className="py-2 pr-3">{`${trade.transactionType} ${trade.optionType} ${trade.strike}`}</td>
+                    <td className="py-2 pr-3">{trade.quantity}</td>
+                    <td className="py-2 pr-3">
+                      <span className="px-2 py-1 rounded text-xs bg-indigo-900 text-indigo-200">{trade.status || "queued"}</span>
+                    </td>
+                    <td className="py-2 pr-3">{trade.brokers?.join(", ") || "-"}</td>
+                    <td className="py-2 pr-3">
+                      <input
+                        type="number"
+                        placeholder="Set P/L"
+                        className="w-28 px-2 py-1 rounded bg-gray-800 border border-gray-700"
+                        value={trade.profitLoss ?? ""}
+                        onChange={(e) => updateProfitLoss(trade.id, e.target.value)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1162,7 +1301,26 @@ function App() {
   const [tab, setTab] = useState("brokers");
   const [selectedBrokers, setSelectedBrokers] = useState(["zerodha"]);
   const [brokerStatus, setBrokerStatus] = useState({});
+  const [tradeLog, setTradeLog] = useState(() => {
+    try {
+      const saved = localStorage.getItem("tradeLog");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const failoverEnabled = false;
+
+  const addTradeEntry = (trade) => {
+    setTradeLog((prev) => ([
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timestamp: new Date().toISOString(),
+        ...trade,
+      },
+      ...prev,
+    ]).slice(0, 200));
+  };
 
   const refreshBrokerStatus = async () => {
     try {
@@ -1175,6 +1333,10 @@ function App() {
     refreshBrokerStatus();
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem("tradeLog", JSON.stringify(tradeLog));
+  }, [tradeLog]);
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
 
@@ -1182,13 +1344,15 @@ function App() {
         <div className={`tab ${tab==="brokers"?"tab-active":""}`} onClick={()=>setTab("brokers")}>Brokers</div>
         <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
         <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
+        <div className={`tab ${tab==="trade-analytics"?"tab-active":""}`} onClick={()=>setTab("trade-analytics")}>Trade Analytics</div>
         <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
         <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
       </div>
 
       {tab==="brokers" && <BrokersTab selectedBrokers={selectedBrokers} setSelectedBrokers={setSelectedBrokers} brokerStatus={brokerStatus} refreshBrokerStatus={refreshBrokerStatus} />}
       {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} />}
-      {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} />}
+      {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} onTradeExecuted={addTradeEntry} />}
+      {tab==="trade-analytics" && <TradeAnalyticsTab tradeLog={tradeLog} setTradeLog={setTradeLog} />}
       {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} />}
       {tab==="fii-dii" && <FiiDiiTab />}
 
