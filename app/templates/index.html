@@ -67,7 +67,7 @@ body { background:#0f172a; color:#e2e8f0; }
 
 <script type="text/babel">
 
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect } = React;
 
 
 async function getBrokerLoginUrl(broker) {
@@ -144,36 +144,6 @@ async function getBrokerExpiries(symbol = "NIFTY") {
   return res.json();
 }
 
-
-async function getRiskConfig() {
-  const res = await fetch("/api/brokers/risk-config");
-  return res.json();
-}
-
-async function updateRiskConfig(payload) {
-  const res = await fetch("/api/brokers/risk-config", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  return res.json();
-}
-
-async function getTradeAnalytics() {
-  const res = await fetch("/api/brokers/trade-analytics");
-  return res.json();
-}
-
-async function getRecentTrades() {
-  const res = await fetch("/api/brokers/trades?limit=20");
-  return res.json();
-}
-
-async function sendDailySummary() {
-  const res = await fetch("/api/brokers/daily-summary/send", { method: "POST" });
-  return res.json();
-}
-
 const endpoints = {
   pcr: "/api/pcr",
   vix: "/api/vix",
@@ -183,9 +153,7 @@ const endpoints = {
   rsi: "/api/rsi",
   bias: "/api/marketbias",
   niftyavgs: "/api/niftyavgs",
-  macd: "/api/macd",
-  advanceDecline: "/api/advance-decline",
-  sectorRotation: "/api/sector-rotation"
+  macd: "/api/macd"
 };
 
 function getCardClass(text) {
@@ -221,7 +189,6 @@ function getMacdCardClass(macd) {
 
 function useAPI() {
   const [data, setData] = useState({});
-  const [loading, setLoading] = useState({});
 
   function isMarketOpen() {
     const now = new Date();
@@ -238,22 +205,15 @@ function useAPI() {
 
   async function fetchAll() {
     const results = {};
-    const loadingState = {};
-    for (const key in endpoints) loadingState[key] = true;
-    setLoading(loadingState);
-
     for (const key in endpoints) {
       try {
         const res = await fetch(endpoints[key]);
         results[key] = await res.json();
       } catch {
         results[key] = null;
-      } finally {
-        loadingState[key] = false;
       }
     }
     setData(results);
-    setLoading({ ...loadingState });
   }
 
   useEffect(() => {
@@ -263,19 +223,19 @@ function useAPI() {
     return () => clearInterval(interval);
   }, []);
 
-  return { data, loading };
+  return { data };
 }
 
-const KeyValue = React.memo(function KeyValue({label, value}) {
+function KeyValue({label, value}) {
   return (
     <div className="flex justify-between py-1 text-sm gap-3 items-start">
       <span className="text-gray-400 flex-shrink-0 min-w-0">{label}</span>
       <span className="text-right break-words overflow-wrap-anywhere max-w-[60%]">{value ?? "-"}</span>
     </div>
   );
-});
+}
 
-const ToggleButton = React.memo(function ToggleButton({ isHidden, onToggle }) {
+function ToggleButton({ isHidden, onToggle }) {
   return (
     <button
       onClick={onToggle}
@@ -295,7 +255,7 @@ const ToggleButton = React.memo(function ToggleButton({ isHidden, onToggle }) {
       )}
     </button>
   );
-});
+}
 
 function formatIndexValue(value, decimals = 2) {
   const num = Number(value);
@@ -303,7 +263,7 @@ function formatIndexValue(value, decimals = 2) {
   return num.toFixed(decimals);
 }
 
-const LiveIndicesCard = React.memo(function LiveIndicesCard({indices}) {
+function LiveIndicesCard({indices}) {
   return (
     <div className="card neutral">
       <div className="section-title">Live Indices</div>
@@ -324,9 +284,9 @@ const LiveIndicesCard = React.memo(function LiveIndicesCard({indices}) {
       <div className="mt-4 text-gray-500 text-sm">{indices?.timestamp}</div>
     </div>
   );
-});
+}
 
-const PlatformStatusCard = React.memo(function PlatformStatusCard({ brokerStatus }) {
+function PlatformStatusCard({ brokerStatus }) {
   const items = [
     { key: "zerodha", label: "Zerodha" },
     { key: "fyers", label: "Fyers" },
@@ -352,16 +312,16 @@ const PlatformStatusCard = React.memo(function PlatformStatusCard({ brokerStatus
       </div>
     </div>
   );
-});
+}
 
-const LiveHeaderRow = React.memo(function LiveHeaderRow({ indices, brokerStatus }) {
+function LiveHeaderRow({ indices, brokerStatus }) {
   return (
     <div className="grid md:grid-cols-[2fr_1fr] gap-6 items-stretch">
       <LiveIndicesCard indices={indices} />
       <PlatformStatusCard brokerStatus={brokerStatus} />
     </div>
   );
-});
+}
 
 /* ---------------- MOVING AVERAGES CARDS ---------------- */
 
@@ -463,8 +423,8 @@ function ExponentialMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
 
 /* ---------------- DASHBOARD ---------------- */
 
-function DashboardTab({data, brokerStatus, loading}) {
-  const { pcr, vix, oi, rsi, indices, niftyavgs, macd, advanceDecline } = data;
+function DashboardTab({data, brokerStatus}) {
+  const { pcr, vix, oi, rsi, indices, niftyavgs, macd } = data;
   const hiddenCardsStorageKey = "dashboardHiddenCards";
   const defaultHiddenCards = {
     pcr: false,
@@ -474,8 +434,7 @@ function DashboardTab({data, brokerStatus, loading}) {
     niftyPrice: false,
     sma: false,
     ema: false,
-    macd: false,
-    advanceDecline: false
+    macd: false
   };
   
   const [hiddenCards, setHiddenCards] = useState(() => {
@@ -501,8 +460,6 @@ function DashboardTab({data, brokerStatus, loading}) {
     }));
   };
 
-  const loadingCard = (key) => loading?.[key] ? <div className="text-sm text-gray-400">Loading...</div> : null;
-
   // Separate visible and hidden cards
   const cards = [
     { id: 'pcr', component: (
@@ -510,8 +467,6 @@ function DashboardTab({data, brokerStatus, loading}) {
         <ToggleButton isHidden={hiddenCards.pcr} onToggle={() => toggleCard('pcr')} />
         <div className="section-title">Overall PCR</div>
         {!hiddenCards.pcr && (
-          <>
-            {loadingCard("pcr")}
           <>
             <KeyValue label="PCR" value={pcr?.pcr}/>
             <KeyValue label="Sentiment" value={pcr?.sentiment}/>
@@ -564,20 +519,6 @@ function DashboardTab({data, brokerStatus, loading}) {
     { id: 'niftyPrice', component: <NiftyPriceCard niftyavgs={niftyavgs} isHidden={hiddenCards.niftyPrice} onToggle={() => toggleCard('niftyPrice')} /> },
     { id: 'sma', component: <SimpleMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.sma} onToggle={() => toggleCard('sma')} /> },
     { id: 'ema', component: <ExponentialMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.ema} onToggle={() => toggleCard('ema')} /> },
-    { id: 'advanceDecline', component: (
-      <div className={`card neutral ${hiddenCards.advanceDecline ? 'card-hidden' : ''}`}>
-        <ToggleButton isHidden={hiddenCards.advanceDecline} onToggle={() => toggleCard('advanceDecline')} />
-        <div className="section-title">Advance/Decline Ratio</div>
-        {!hiddenCards.advanceDecline && (
-          <>
-            {loadingCard("advanceDecline")}
-            <KeyValue label="Advances" value={advanceDecline?.advances}/>
-            <KeyValue label="Declines" value={advanceDecline?.declines}/>
-            <KeyValue label="Ratio" value={advanceDecline?.ratio}/>
-          </>
-        )}
-      </div>
-    )},
     { id: 'macd', component: (
       <div className={`${getMacdCardClass(macd)} ${hiddenCards.macd ? 'card-hidden' : ''}`}>
         <ToggleButton isHidden={hiddenCards.macd} onToggle={() => toggleCard('macd')} />
@@ -599,14 +540,7 @@ function DashboardTab({data, brokerStatus, loading}) {
 
   return (
     <div className="space-y-8">
-      <div className="grid md:grid-cols-3 gap-6 items-stretch">
-        <LiveIndicesCard indices={indices} />
-        <PlatformStatusCard brokerStatus={brokerStatus} />
-        <div className="card neutral">
-          <div className="section-title">Live P&L</div>
-          <div className="text-3xl font-bold text-cyan-300">{analytics?.live_pnl ?? 0}</div>
-        </div>
-      </div>
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} />
 
       <div className="grid md:grid-cols-3 gap-6">
         {visibleCards.map(card => (
@@ -622,7 +556,7 @@ function DashboardTab({data, brokerStatus, loading}) {
 
 /* ---------------- STRATEGY ACCORDION ---------------- */
 
-const StrategyAccordion = React.memo(function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selectedBrokers, failoverEnabled, expiryDate }) {
+function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selectedBrokers, failoverEnabled, expiryDate }) {
   const [deployed, setDeployed] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [deployMessage, setDeployMessage] = useState("");
@@ -727,7 +661,7 @@ const StrategyAccordion = React.memo(function StrategyAccordion({ name, data, is
       )}
     </div>
   );
-});
+}
 
 /* ---------------- ATM OPTIONS CARD ---------------- */
 
@@ -870,7 +804,7 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
 /* ---------------- OPTIONS ENGINE TAB ---------------- */
 
 function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}) {
-  const { bias, indices, analytics } = data;
+  const { bias, indices } = data;
   const [openStrategy, setOpenStrategy] = useState(null);
   const [expiries, setExpiries] = useState([]);
   const [selectedExpiry, setSelectedExpiry] = useState("");
@@ -918,14 +852,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}
 
   return (
     <div className="space-y-8">
-      <div className="grid md:grid-cols-3 gap-6 items-stretch">
-        <LiveIndicesCard indices={indices} />
-        <PlatformStatusCard brokerStatus={brokerStatus} />
-        <div className="card neutral">
-          <div className="section-title">Live P&L</div>
-          <div className="text-3xl font-bold text-cyan-300">{analytics?.live_pnl ?? 0}</div>
-        </div>
-      </div>
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} />
 
       <div className={getCardClass(bias?.bias)}>
         <div className="section-title">Options Strategy Engine</div>
@@ -1037,9 +964,6 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
 
   useEffect(() => {
     refreshBrokerStatus();
-    getTradeAnalytics().then((r) => setAnalytics(r.analytics || {}));
-    getRecentTrades().then((r) => setRecentTrades(r.trades || []));
-    getRiskConfig().then((r) => setRiskConfig(r.config || riskConfig));
   }, []);
 
   const BrokerConnectionCard = ({ broker, title, fields = [] }) => {
@@ -1140,16 +1064,6 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
         </label>
       </div>
       <div className="text-sm text-gray-300">Selected platform(s) for order execution: {selectedBrokers.join(", ") || "None"}</div>
-      <div className="card neutral">
-        <div className="section-title">Risk & Mode Configuration</div>
-        <div className="grid md:grid-cols-2 gap-3">
-          <input className="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-sm" placeholder="Daily loss limit" onBlur={async (e)=>{ await updateRiskConfig({daily_loss_limit:Number(e.target.value||0)}); }} />
-          <input className="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-sm" placeholder="Trailing stop-loss %" onBlur={async (e)=>{ await updateRiskConfig({trailing_stop_pct:Number(e.target.value||2)}); }} />
-          <input className="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-sm" placeholder="Summary email" onBlur={async (e)=>{ await updateRiskConfig({summary_email:e.target.value}); }} />
-          <label className="text-sm flex items-center gap-2"><input type="checkbox" defaultChecked onChange={async (e)=>{ await updateRiskConfig({paper_trading:e.target.checked}); }} /> Paper trading mode</label>
-        </div>
-        <button onClick={async ()=>{ const res=await sendDailySummary(); setMessage(res.message || res.error); }} className="mt-3 px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Send Daily Summary</button>
-      </div>
     </div>
   );
 }
@@ -1196,55 +1110,15 @@ function FiiDiiTab() {
   );
 }
 
-
-function MarketMoodTab({ data }) {
-  const sectors = data?.sectorRotation?.sectors || [];
-  return (
-    <div className="card neutral">
-      <div className="section-title">Sector Rotation Heatmap</div>
-      <div className="grid md:grid-cols-3 gap-2">
-        {sectors.map((s) => (
-          <div key={s.sector} className={`p-2 rounded border ${s.mood === "bullish" ? "border-green-500" : s.mood === "bearish" ? "border-rose-500" : "border-gray-600"}`}>
-            <div className="text-sm">{s.sector}</div>
-            <div className="text-xs text-gray-300">{s.change}%</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TradeAnalyticsTab({ analytics, trades }) {
-  return (
-    <div className="space-y-6">
-      <div className="card neutral">
-        <div className="section-title">Trade Analytics</div>
-        <KeyValue label="Win Rate" value={`${analytics?.win_rate ?? 0}%`} />
-        <KeyValue label="Avg Profit" value={analytics?.avg_profit} />
-        <KeyValue label="Avg Loss" value={analytics?.avg_loss} />
-      </div>
-      <div className="card neutral">
-        <div className="section-title">Recent Executed Trades Log</div>
-        {(trades || []).map((t, i) => (
-          <div key={i} className="text-xs border-b border-gray-700 py-1">{t.timestamp} | {t.symbol} | {t.transaction_type} | {t.quantity} | {t.broker}</div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /* ---------------- MAIN APP ---------------- */
 
 function App() {
-  const { data, loading } = useAPI();
+  const { data } = useAPI();
   const [tab, setTab] = useState("brokers");
   const [selectedBrokers, setSelectedBrokers] = useState(["zerodha"]);
   const [brokerStatus, setBrokerStatus] = useState({});
   const [activeBroker, setActiveBroker] = useState("zerodha");
   const [failoverEnabled, setFailoverEnabled] = useState(true);
-  const [analytics, setAnalytics] = useState({});
-  const [recentTrades, setRecentTrades] = useState([]);
-  const [riskConfig, setRiskConfig] = useState({ daily_loss_limit: 0, paper_trading: true, trailing_stop_pct: 2, summary_email: "" });
 
   const refreshBrokerStatus = async () => {
     try {
@@ -1256,9 +1130,6 @@ function App() {
 
   useEffect(() => {
     refreshBrokerStatus();
-    getTradeAnalytics().then((r) => setAnalytics(r.analytics || {}));
-    getRecentTrades().then((r) => setRecentTrades(r.trades || []));
-    getRiskConfig().then((r) => setRiskConfig(r.config || riskConfig));
   }, []);
 
   return (
@@ -1268,17 +1139,13 @@ function App() {
         <div className={`tab ${tab==="brokers"?"tab-active":""}`} onClick={()=>setTab("brokers")}>Brokers</div>
         <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
         <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
-        <div className={`tab ${tab==="mood"?"tab-active":""}`} onClick={()=>setTab("mood")}>Market Mood</div>
-        <div className={`tab ${tab==="analytics"?"tab-active":""}`} onClick={()=>setTab("analytics")}>Trade Analytics</div>
         <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
         <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
       </div>
 
       {tab==="brokers" && <BrokersTab selectedBrokers={selectedBrokers} setSelectedBrokers={setSelectedBrokers} brokerStatus={brokerStatus} refreshBrokerStatus={refreshBrokerStatus} activeBroker={activeBroker} setActiveBroker={setActiveBroker} failoverEnabled={failoverEnabled} setFailoverEnabled={setFailoverEnabled} />}
-      {tab==="dashboard" && <DashboardTab data={{...data, analytics}} loading={loading} brokerStatus={brokerStatus} />}
-      {tab==="options" && <OptionsEngineTab data={{...data, analytics}} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} />}
-      {tab==="mood" && <MarketMoodTab data={data} />}
-      {tab==="analytics" && <TradeAnalyticsTab analytics={analytics} trades={recentTrades} />}
+      {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} />}
+      {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} />}
       {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} />}
       {tab==="fii-dii" && <FiiDiiTab />}
 

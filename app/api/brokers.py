@@ -12,7 +12,6 @@ from app.services.fyers import fyers_client
 from app.services.stoxkart import stoxkart_client
 from app.services.zerodha import zerodha_client
 from app.services.expiry_service import get_index_expiries
-from app.services.trade_journal import trade_journal
 
 brokers_bp = Blueprint("brokers", __name__)
 
@@ -231,40 +230,4 @@ def configure_broker():
         "success": True,
         "broker": broker,
         "configured": order_execution_engine.broker_status().get(broker, {}),
-    })
-
-
-@brokers_bp.route("/brokers/risk-config", methods=["GET", "POST"])
-def broker_risk_config():
-    if request.method == "GET":
-        return jsonify({"success": True, "config": trade_journal.config()})
-
-    payload = request.get_json(silent=True) or {}
-    cfg = trade_journal.update_config(payload)
-    return jsonify({"success": True, "config": cfg})
-
-
-@brokers_bp.route("/brokers/trade-analytics", methods=["GET"])
-def trade_analytics():
-    return jsonify({"success": True, "analytics": trade_journal.analytics()})
-
-
-@brokers_bp.route("/brokers/trades", methods=["GET"])
-def recent_trades():
-    limit = int(request.args.get("limit", 50))
-    return jsonify({"success": True, "trades": trade_journal.recent_trades(limit=limit)})
-
-
-@brokers_bp.route("/brokers/daily-summary/send", methods=["POST"])
-def send_daily_summary():
-    analytics = trade_journal.analytics()
-    email = trade_journal.config().get("summary_email")
-    if not email:
-        return jsonify({"success": False, "error": "summary_email is not configured"}), 400
-
-    return jsonify({
-        "success": True,
-        "message": f"Daily summary queued for {email}",
-        "email": email,
-        "analytics": analytics,
     })

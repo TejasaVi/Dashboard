@@ -1,62 +1,80 @@
 from flask import Blueprint, jsonify
 
-from app.services.nse_history import fetch_nifty_ohlcv, resample_close
-from app.services.ta_compat import rsi as ta_rsi
+import yfinance as yf
+import pandas as pd
+
+
+def tradingview_rsi(series, period=14):
+    """
+    TradingView-style RSI (Wilder's RSI)
+    """
+    delta = series.diff()
+
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+
+    return rsi
+
+
+def get_nifty_rsi(interval="60m", period="1mo", rsi_period=14):
+    """
+    Fetch NIFTY RSI for given interval
+    """
+    df = yf.download("^NSEI", interval=interval, period=period, progress=False)
+
+    if df.empty:
+        raise ValueError("No data fetched. Check interval/period.")
+
+    df["RSI"] = tradingview_rsi(df["Close"], rsi_period)
+
+    latest = df.iloc[-1]
+
+    return {
+        "interval": interval,
+        "rsi_period": rsi_period,
+        "rsi_value": round(latest["RSI"], 2),
+        "timestamp": latest.name,
+    }
 
 
 rsi_bp = Blueprint("rsi", __name__)
 
 
-def get_nifty_rsi(interval="60m", period="1mo", rsi_period=14):
-    _ = period  # kept for API compatibility
-    df = fetch_nifty_ohlcv(limit=600)
-    if df.empty:
-        raise ValueError("No data fetched from NSE chart endpoint.")
-
-    close = resample_close(df, interval)
-    if close.empty:
-        raise ValueError("Insufficient resampled data for RSI.")
-
-    rsi_series = ta_rsi(close, period=rsi_period)
-    latest_rsi = float(rsi_series.dropna().iloc[-1]) if not rsi_series.dropna().empty else None
-    latest_ts = close.index[-1]
-
-    return {
-        "interval": interval,
-        "rsi_period": rsi_period,
-        "rsi_value": round(latest_rsi, 2) if latest_rsi is not None else None,
-        "timestamp": latest_ts,
-    }
-
-
 @rsi_bp.route("/rsi", methods=["GET"])
 def rsi_check():
-    rsi60_value = get_nifty_rsi()["rsi_value"]
-    rsi15_value = get_nifty_rsi(interval="15m")["rsi_value"]
+    rsi60 = get_nifty_rsi()
+    rsi60_value = rsi60["rsi_value"].iloc[0]
 
-    if rsi60_value is None or rsi15_value is None:
-        return jsonify({"rsi1hr": rsi60_value, "rsi15min": rsi15_value, "sentiment": "Insufficient data"})
+    rsi15 = get_nifty_rsi(interval="15m")
+    rsi15_value = rsi15["rsi_value"].iloc[0]
 
+    # Determine sentiment
     if rsi60_value < 30:
         if rsi15_value < 30:
             sentiment = "Strong Buy"
         elif rsi15_value <= 70:
             sentiment = "Buy"
-        else:
+        else:  # rsi15 > 70
             sentiment = "Caution Buy"
-    elif rsi60_value <= 70:
+    elif rsi60_value <= 70:  # 30-70
         if rsi15_value < 30:
             sentiment = "Buy (Short-term oversold)"
         elif rsi15_value <= 70:
             sentiment = "Neutral"
-        else:
+        else:  # rsi15 > 70
             sentiment = "Sell (Short-term overbought)"
-    else:
+    else:  # rsi60 > 70
         if rsi15_value < 30:
             sentiment = "Caution Sell"
         elif rsi15_value <= 70:
             sentiment = "Sell"
-        else:
+        else:  # rsi15 > 70
             sentiment = "Strong Sell"
 
-    return jsonify({"rsi1hr": rsi60_value, "rsi15min": rsi15_value, "sentiment": sentiment})
+    return jsonify({"rsi1hr": rsi60_value, "rsi15min":rsi15_value , "sentiment": sentiment})
