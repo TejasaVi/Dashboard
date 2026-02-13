@@ -336,7 +336,7 @@ function PlatformStatusCard({ brokerStatus }) {
   );
 }
 
-function LivePnlCard({ livePnl }) {
+function LivePnlCard({ livePnl, sourceLabel }) {
   const totalPnl = Number(livePnl?.total_pnl || 0);
   const pnlClass = totalPnl >= 0 ? "text-green-400" : "text-rose-400";
 
@@ -354,17 +354,34 @@ function LivePnlCard({ livePnl }) {
           <span>{livePnl?.open_positions ?? 0}</span>
         </div>
       </div>
-      <div className="mt-3 text-[11px] text-gray-500">{livePnl?.success ? "Source: Zerodha" : (livePnl?.error || "Unavailable")}</div>
+      <div className="mt-3 text-[11px] text-gray-500">{livePnl?.success ? `Source: ${sourceLabel || "Connected Broker"}` : (livePnl?.error || "Unavailable")}</div>
     </div>
   );
 }
 
-function LiveHeaderRow({ indices, brokerStatus, livePnl, showLivePnl = false }) {
+function LiveHeaderRow({ indices, brokerStatus, livePnl, showLivePnl = false, showPlatformStatus = true }) {
+  const connectedBrokers = Object.entries(brokerStatus?.brokers || {})
+    .filter(([, state]) => !!state?.connected)
+    .map(([name]) => name);
+
+  const sourceBroker = livePnl?.source_broker
+    || brokerStatus?.active_broker
+    || connectedBrokers[0]
+    || null;
+
+  const sourceLabel = sourceBroker
+    ? sourceBroker.charAt(0).toUpperCase() + sourceBroker.slice(1)
+    : null;
+
+  const gridClass = showLivePnl
+    ? (showPlatformStatus ? "md:grid-cols-3" : "md:grid-cols-[2fr_1fr]")
+    : "md:grid-cols-[2fr_1fr]";
+
   return (
-    <div className={`grid gap-6 items-stretch ${showLivePnl ? "md:grid-cols-3" : "md:grid-cols-[2fr_1fr]"}`}>
+    <div className={`grid gap-6 items-stretch ${gridClass}`}>
       <LiveIndicesCard indices={indices} />
-      <PlatformStatusCard brokerStatus={brokerStatus} />
-      {showLivePnl && <LivePnlCard livePnl={livePnl} />}
+      {showPlatformStatus && <PlatformStatusCard brokerStatus={brokerStatus} />}
+      {showLivePnl && <LivePnlCard livePnl={livePnl} sourceLabel={sourceLabel} />}
     </div>
   );
 }
@@ -901,7 +918,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled,
 
   return (
     <div className="space-y-8">
-      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} />
 
       <div className={getCardClass(bias?.bias)}>
         <div className="section-title">Options Strategy Engine</div>
