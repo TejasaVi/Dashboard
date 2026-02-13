@@ -21,8 +21,8 @@ def define_market_bias():
     rsi60_data = get_nifty_rsi(interval="60m")
     rsi15_data = get_nifty_rsi(interval="15m")
 
-    rsi60 = float(rsi60_data["rsi_value"])
-    rsi15 = float(rsi15_data["rsi_value"])
+    rsi60 = float(rsi60_data["rsi_value"].iloc[0])
+    rsi15 = float(rsi15_data["rsi_value"].iloc[0])
     
     nse_client = NSEClient()
     data = nse_client.fetch_indices()
