@@ -4,6 +4,7 @@ from app.services.broker_engine import OrderRequest, broker_switcher, order_exec
 from app.services.fyers import fyers_client
 from app.services.stoxkart import stoxkart_client
 from app.services.zerodha import zerodha_client
+from app.services.expiry_service import get_index_expiries
 
 brokers_bp = Blueprint("brokers", __name__)
 
@@ -80,6 +81,15 @@ def execute_strategy():
         return jsonify(result), code
     except Exception as exc:
         return jsonify({"success": False, "error": str(exc)}), 400
+
+
+@brokers_bp.route("/brokers/expiries", methods=["GET"])
+def broker_expiries():
+    symbol = (request.args.get("symbol") or "NIFTY").upper()
+    try:
+        return jsonify({"success": True, "symbol": symbol, "expiries": get_index_expiries(symbol)})
+    except Exception as exc:
+        return jsonify({"success": False, "symbol": symbol, "expiries": [], "error": str(exc)}), 500
 
 
 @brokers_bp.route("/brokers/configure", methods=["POST"])
