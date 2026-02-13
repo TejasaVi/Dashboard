@@ -1,6 +1,13 @@
 from flask import Blueprint, jsonify, request
 
-from app.services.broker_engine import OrderRequest, broker_switcher, order_execution_engine, strategy_router
+from app.services.broker_engine import (
+    DeploymentPlanRequest,
+    OrderRequest,
+    broker_switcher,
+    deployment_execution_engine,
+    order_execution_engine,
+    strategy_router,
+)
 from app.services.fyers import fyers_client
 from app.services.stoxkart import stoxkart_client
 from app.services.zerodha import zerodha_client
@@ -55,6 +62,65 @@ def disconnect_broker():
         "broker": broker,
         "status": order_execution_engine.broker_status().get(broker, {}),
     })
+
+
+@brokers_bp.route("/brokers/deploy", methods=["POST"])
+def deploy_with_engine():
+    payload = request.get_json(silent=True) or {}
+
+    plan = DeploymentPlanRequest(
+        index_name=payload.get("index_name", "NIFTY"),
+        strike=payload.get("strike"),
+        option_type=payload.get("option_type"),
+        expiry_date=payload.get("expiry_date") or (payload.get("metadata") or {}).get("expiry_date"),
+        lots=int(payload.get("lots", payload.get("quantity", 1))),
+        transaction_type=payload.get("transaction_type", "BUY"),
+        metadata=payload.get("metadata") or {},
+    )
+
+    try:
+        result = deployment_execution_engine.deploy(plan)
+        return jsonify(result), 200
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+
+@brokers_bp.route("/brokers/deploy/process", methods=["POST"])
+def process_deployments():
+    payload = request.get_json(silent=True) or {}
+    plan_id = payload.get("plan_id")
+    try:
+        result = deployment_execution_engine.process(plan_id=plan_id)
+        return jsonify(result), 200
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+
+@brokers_bp.route("/brokers/deploy/<plan_id>", methods=["GET"])
+def deployment_status(plan_id: str):
+    try:
+        return jsonify(deployment_execution_engine.status(plan_id)), 200
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 404
+
+
+@brokers_bp.route("/brokers/deploy", methods=["GET"])
+def list_deployments():
+    active_only = (request.args.get("active") or "0") == "1"
+    try:
+        return jsonify(deployment_execution_engine.list(active_only=active_only)), 200
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+
+@brokers_bp.route("/brokers/square-off", methods=["POST"])
+def square_off_deployed_positions():
+    try:
+        result = deployment_execution_engine.square_off()
+        code = 200 if result.get("success") else 400
+        return jsonify(result), code
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
 
 
 @brokers_bp.route("/brokers/place-order", methods=["POST"])

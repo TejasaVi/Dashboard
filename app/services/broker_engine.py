@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from app.services.fyers import fyers_client
 from app.services.stoxkart import stoxkart_client
 from app.services.zerodha import zerodha_client
+from app.services.deployment_engine import DeploymentRequest, deployment_engine
 
 
 @dataclass
@@ -18,6 +19,19 @@ class OrderRequest:
     transaction_type: str = "BUY"
     fyers_symbol: Optional[str] = None
     stoxkart_symbol: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+
+
+@dataclass
+class DeploymentPlanRequest:
+    index_name: str = "NIFTY"
+    strike: Optional[int] = None
+    option_type: Optional[str] = None
+    expiry_date: Optional[str] = None
+    lots: int = 1
+    transaction_type: str = "BUY"
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -243,3 +257,33 @@ order_execution_engine = OrderExecutionEngine(
     },
     switcher=broker_switcher,
 )
+
+
+class DeploymentExecutionEngine:
+    def deploy(self, request: DeploymentPlanRequest) -> Dict[str, Any]:
+        if request.strike is None or request.option_type not in {"CE", "PE"}:
+            raise ValueError("Deployment requires strike and option_type (CE/PE)")
+        deployment_request = DeploymentRequest(
+            index_name=request.index_name,
+            strike=int(request.strike),
+            option_type=request.option_type,
+            expiry_date=request.expiry_date,
+            lots=int(request.lots),
+            transaction_type=request.transaction_type,
+        )
+        return deployment_engine.create_plan(deployment_request, metadata=request.metadata)
+
+    def process(self, plan_id: Optional[str] = None) -> Dict[str, Any]:
+        return deployment_engine.process(plan_id=plan_id)
+
+    def status(self, plan_id: str) -> Dict[str, Any]:
+        return deployment_engine.get_plan(plan_id)
+
+    def list(self, active_only: bool = False) -> Dict[str, Any]:
+        return deployment_engine.list_plans(active_only=active_only)
+
+    def square_off(self) -> Dict[str, Any]:
+        return deployment_engine.square_off_active_buys()
+
+
+deployment_execution_engine = DeploymentExecutionEngine()
