@@ -207,6 +207,9 @@ class ZerodhaClient:
         return float(cash if cash is not None else (live_balance or 0))
 
     def _resolve_order_mode(self, variety: str, product: str) -> tuple[str, str]:
+        if variety.upper() == "AMO":
+            # Keep AMO payload aligned with previous working setup: always NRML for automation.
+            return "AMO", "NRML"
         if variety.upper() != "AUTO":
             return variety.upper(), product.upper()
         now = datetime.now(tz=ZoneInfo("Asia/Kolkata"))
@@ -215,6 +218,16 @@ class ZerodhaClient:
         if is_weekday and not (time(9, 15) <= current <= time(15, 30)):
             return "AMO", "NRML"
         return "REGULAR", "NRML"
+
+    def _resolve_market_protection(self) -> int:
+        configured = (os.getenv("ZERODHA_MARKET_PROTECTION", "3") or "3").strip()
+        try:
+            value = int(configured)
+        except ValueError as exc:
+            raise ValueError("ZERODHA_MARKET_PROTECTION must be an integer between 0 and 100") from exc
+        if not (0 <= value <= 100):
+            raise ValueError("ZERODHA_MARKET_PROTECTION must be between 0 and 100")
+        return value
 
     def place_option_order(
         self,
@@ -245,6 +258,9 @@ class ZerodhaClient:
         effective_variety, effective_product = self._resolve_order_mode(variety=variety, product=product)
         order_variety = self._kite.VARIETY_AMO if effective_variety == "AMO" else self._kite.VARIETY_REGULAR
         order_product = self._kite.PRODUCT_NRML if effective_product == "NRML" else self._kite.PRODUCT_MIS
+        order_kwargs: Dict[str, Any] = {}
+        if effective_variety == "AMO":
+            order_kwargs["market_protection"] = self._resolve_market_protection()
 
         order_id = self._kite.place_order(
             variety=order_variety,
@@ -258,7 +274,8 @@ class ZerodhaClient:
             quantity=int(quantity) * lot_size,
             order_type=self._kite.ORDER_TYPE_MARKET,
             product=order_product,
-            validity=self._kite.VALIDITY_DAY
+            validity=self._kite.VALIDITY_DAY,
+            **order_kwargs,
         )
 
         return {
@@ -308,6 +325,10 @@ class ZerodhaClient:
 
         positions = self._kite.positions().get("net", [])
         orders = []
+        normalized_product = "NRML" if variety.upper() == "AMO" else product.upper()
+        order_kwargs: Dict[str, Any] = {}
+        if variety.upper() == "AMO":
+            order_kwargs["market_protection"] = self._resolve_market_protection()
         for pos in positions:
             qty = int(pos.get("quantity") or 0)
             if qty <= 0:
@@ -323,8 +344,9 @@ class ZerodhaClient:
                 transaction_type=self._kite.TRANSACTION_TYPE_SELL,
                 quantity=qty,
                 order_type=self._kite.ORDER_TYPE_MARKET,
-                product=self._kite.PRODUCT_NRML if product.upper() == "NRML" else self._kite.PRODUCT_MIS,
+                product=self._kite.PRODUCT_NRML if normalized_product == "NRML" else self._kite.PRODUCT_MIS,
                 validity=self._kite.VALIDITY_DAY,
+                **order_kwargs,
             )
             orders.append({"order_id": order_id, "tradingsymbol": symbol, "quantity": qty})
 
