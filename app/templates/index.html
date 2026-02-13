@@ -12,7 +12,7 @@
 
 <style>
 body { background:#0f172a; color:#e2e8f0; }
-.card { border-radius:14px; padding:20px; border:1px solid #1f2937; transition:0.3s; position: relative; }
+.card { border-radius:14px; padding:20px; border:1px solid #1f2937; transition:0.3s; position: relative; overflow: hidden; }
 .section-title { font-size:18px; font-weight:600; margin-bottom:10px; }
 .tab { cursor:pointer; padding:12px 20px; }
 .tab-active { border-bottom:2px solid #6366f1; }
@@ -276,27 +276,33 @@ function formatPercent(value, decimals = 2) {
 }
 
 
-function LiveIndicesCard({indices}) {
+function LiveIndicesCard({ indices, connectedBrokerLabel = null }) {
   return (
-    <div className="card neutral">
+    <div className="card neutral h-full">
       <div className="section-title">Live Indices</div>
-      <div className="grid grid-cols-3 gap-6 text-center">
-        <div>
-          <div className="text-3xl font-bold text-cyan-400">{formatIndexValue(indices?.NIFTY50)}</div>
+      <div className="grid grid-cols-3 gap-3 md:gap-4 text-center">
+        <div className="min-w-0">
+          <div className="text-[clamp(1.25rem,1.8vw,2rem)] font-bold leading-tight text-cyan-400">{formatIndexValue(indices?.NIFTY50)}</div>
           <div className="text-gray-400">NIFTY50</div>
         </div>
-        <div>
-          <div className="text-3xl font-bold text-emerald-400">{formatIndexValue(indices?.BANKNIFTY)}</div>
+        <div className="min-w-0">
+          <div className="text-[clamp(1.25rem,1.8vw,2rem)] font-bold leading-tight text-emerald-400">{formatIndexValue(indices?.BANKNIFTY)}</div>
           <div className="text-gray-400">BANKNIFTY</div>
         </div>
-        <div>
-          <div className="text-3xl font-bold text-rose-400">{formatIndexValue(indices?.SENSEX, 2)}</div>
+        <div className="min-w-0">
+          <div className="text-[clamp(1.25rem,1.8vw,2rem)] font-bold leading-tight text-rose-400">{formatIndexValue(indices?.SENSEX, 2)}</div>
           <div className="text-gray-400">SENSEX</div>
         </div>
       </div>
       <div className="mt-4 text-gray-500 text-sm">{indices?.timestamp}</div>
       <div className="mt-1 text-xs text-gray-400">
         NSE Capital Market: <span className={indices?.market?.isOpen ? "text-green-400" : "text-amber-400"}>{indices?.market?.status ?? "Unknown"}</span>
+        {connectedBrokerLabel && (
+          <>
+            <span className="mx-1 text-gray-500">•</span>
+            <span>Broker: <span className="text-cyan-300">{connectedBrokerLabel}</span></span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -336,7 +342,7 @@ function PlatformStatusCard({ brokerStatus }) {
   );
 }
 
-function LivePnlCard({ livePnl }) {
+function LivePnlCard({ livePnl, sourceLabel }) {
   const totalPnl = Number(livePnl?.total_pnl || 0);
   const pnlClass = totalPnl >= 0 ? "text-green-400" : "text-rose-400";
 
@@ -354,17 +360,34 @@ function LivePnlCard({ livePnl }) {
           <span>{livePnl?.open_positions ?? 0}</span>
         </div>
       </div>
-      <div className="mt-3 text-[11px] text-gray-500">{livePnl?.success ? "Source: Zerodha" : (livePnl?.error || "Unavailable")}</div>
+      <div className="mt-3 text-[11px] text-gray-500">{livePnl?.success ? `Source: ${sourceLabel || "Connected Broker"}` : (livePnl?.error || "Unavailable")}</div>
     </div>
   );
 }
 
-function LiveHeaderRow({ indices, brokerStatus, livePnl, showLivePnl = false }) {
+function LiveHeaderRow({ indices, brokerStatus, livePnl, showLivePnl = false, showPlatformStatus = true }) {
+  const connectedBrokers = Object.entries(brokerStatus?.brokers || {})
+    .filter(([, state]) => !!state?.connected)
+    .map(([name]) => name);
+
+  const sourceBroker = livePnl?.source_broker
+    || connectedBrokers[0]
+    || brokerStatus?.active_broker
+    || null;
+
+  const sourceLabel = sourceBroker
+    ? sourceBroker.charAt(0).toUpperCase() + sourceBroker.slice(1)
+    : null;
+
+  const gridClass = showLivePnl
+    ? (showPlatformStatus ? "md:grid-cols-3" : "md:grid-cols-[2fr_1fr]")
+    : "md:grid-cols-[2fr_1fr]";
+
   return (
-    <div className={`grid gap-6 items-stretch ${showLivePnl ? "md:grid-cols-3" : "md:grid-cols-[2fr_1fr]"}`}>
+    <div className={`grid gap-6 items-stretch ${gridClass}`}>
       <LiveIndicesCard indices={indices} />
-      <PlatformStatusCard brokerStatus={brokerStatus} />
-      {showLivePnl && <LivePnlCard livePnl={livePnl} />}
+      {showPlatformStatus && <PlatformStatusCard brokerStatus={brokerStatus} />}
+      {showLivePnl && <LivePnlCard livePnl={livePnl} sourceLabel={sourceLabel} />}
     </div>
   );
 }
@@ -901,7 +924,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled,
 
   return (
     <div className="space-y-8">
-      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} />
 
       <div className={getCardClass(bias?.bias)}>
         <div className="section-title">Options Strategy Engine</div>
@@ -1113,10 +1136,15 @@ function MMITab({data, brokerStatus}) {
 
   const marketStates = indices?.marketStates || [];
   const indexSnapshot = indices?.indexSnapshot || {};
+  const connectedBrokerName = Object.entries(brokerStatus?.brokers || {})
+    .find(([, state]) => !!state?.connected)?.[0] || brokerStatus?.active_broker || null;
+  const connectedBrokerLabel = connectedBrokerName
+    ? connectedBrokerName.charAt(0).toUpperCase() + connectedBrokerName.slice(1)
+    : null;
 
   return (
     <div className="space-y-8">
-      <LiveIndicesCard indices={indices} />
+      <LiveIndicesCard indices={indices} connectedBrokerLabel={connectedBrokerLabel} />
 
       <div className={getCardClass(mmi?.zone)}>
         <div className="section-title">Market Mood Index (Investment)</div>
