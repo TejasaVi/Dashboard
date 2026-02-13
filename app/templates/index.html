@@ -9,6 +9,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/@tanstack/react-query@5/build/umd/index.production.js"></script>
 
 <style>
 body { background:#0f172a; color:#e2e8f0; }
@@ -67,7 +68,8 @@ body { background:#0f172a; color:#e2e8f0; }
 
 <script type="text/babel">
 
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo, useContext, createContext, memo } = React;
+const { QueryClient, QueryClientProvider, useQuery } = ReactQuery;
 
 
 async function getBrokerLoginUrl(broker) {
@@ -187,52 +189,104 @@ function getMacdCardClass(macd) {
   return "card neutral";
 }
 
-function useAPI() {
-  const [data, setData] = useState({});
-
-  function isMarketOpen() {
-    const now = new Date();
-    const istTime = new Date(
-      now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-    );
-    const hours = istTime.getHours();
-    const minutes = istTime.getMinutes();
-    const totalMinutes = hours * 60 + minutes;
-    const marketOpen = 9 * 60;
-    const marketClose = 15 * 60 + 30;
-    return totalMinutes >= marketOpen && totalMinutes <= marketClose;
-  }
-
-  async function fetchAll() {
-    const results = {};
-    for (const key in endpoints) {
-      try {
-        const res = await fetch(endpoints[key]);
-        results[key] = await res.json();
-      } catch {
-        results[key] = null;
-      }
-    }
-    setData(results);
-  }
-
-  useEffect(() => {
-    fetchAll();
-    if (!isMarketOpen()) return;
-    const interval = setInterval(fetchAll, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return { data };
+function isMarketOpen() {
+  const now = new Date();
+  const istTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  const totalMinutes = istTime.getHours() * 60 + istTime.getMinutes();
+  return totalMinutes >= 9 * 60 && totalMinutes <= 15 * 60 + 30;
 }
 
-function KeyValue({label, value}) {
+async function fetchAll() {
+  const entries = await Promise.all(Object.entries(endpoints).map(async ([key, url]) => {
+    try {
+      const res = await fetch(url);
+      return [key, await res.json()];
+    } catch {
+      return [key, null];
+    }
+  }));
+  return Object.fromEntries(entries);
+}
+
+async function fetchTradingSettings() {
+  const res = await fetch('/api/brokers/trading-settings');
+  return res.json();
+}
+
+async function fetchTradeAnalytics() {
+  const res = await fetch('/api/brokers/trades/analytics');
+  return res.json();
+}
+
+async function fetchRecentTrades() {
+  const res = await fetch('/api/brokers/trades/recent');
+  return res.json();
+}
+
+async function fetchAdvanceDecline() {
+  const res = await fetch('/api/advance-decline');
+  return res.json();
+}
+
+async function fetchSectorRotation() {
+  const res = await fetch('/api/sector-rotation');
+  return res.json();
+}
+
+
+async function updateTradingSettings(payload) {
+  const res = await fetch('/api/brokers/trading-settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+async function sendSummaryEmail() {
+  const res = await fetch('/api/brokers/summary-email', { method: 'POST' });
+  return res.json();
+}
+
+function useAPI() {
+  const marketData = useQuery({
+    queryKey: ['marketData'],
+    queryFn: fetchAll,
+    refetchInterval: isMarketOpen() ? 3000 : false,
+    staleTime: 2000,
+  });
+
+  const tradeAnalytics = useQuery({ queryKey: ['tradeAnalytics'], queryFn: fetchTradeAnalytics, refetchInterval: 4000, staleTime: 2000 });
+  const recentTrades = useQuery({ queryKey: ['recentTrades'], queryFn: fetchRecentTrades, refetchInterval: 5000, staleTime: 2000 });
+  const tradingSettings = useQuery({ queryKey: ['tradingSettings'], queryFn: fetchTradingSettings, staleTime: 5000 });
+  const advanceDecline = useQuery({ queryKey: ['advanceDecline'], queryFn: fetchAdvanceDecline, refetchInterval: 5000 });
+  const sectorRotation = useQuery({ queryKey: ['sectorRotation'], queryFn: fetchSectorRotation, refetchInterval: 5000 });
+
+  return {
+    data: marketData.data || {},
+    isLoading: marketData.isLoading,
+    tradeAnalytics: tradeAnalytics.data?.analytics || {},
+    recentTrades: recentTrades.data?.trades || [],
+    tradingSettings: tradingSettings.data?.settings || {},
+    advanceDecline: advanceDecline.data,
+    sectorRotation: sectorRotation.data,
+  };
+}
+
+const GlobalStateContext = createContext(null);
+function useGlobalState() { return useContext(GlobalStateContext); }
+
+const KeyValue = memo(function KeyValue({label, value}) {
   return (
     <div className="flex justify-between py-1 text-sm gap-3 items-start">
       <span className="text-gray-400 flex-shrink-0 min-w-0">{label}</span>
       <span className="text-right break-words overflow-wrap-anywhere max-w-[60%]">{value ?? "-"}</span>
     </div>
   );
+});
+
+function LoadingCard({ title = "Loading" }) {
+  return <div className="card neutral"><div className="section-title">{title}</div><div className="text-sm text-gray-300">Loading...</div></div>;
 }
 
 function ToggleButton({ isHidden, onToggle }) {
@@ -263,7 +317,7 @@ function formatIndexValue(value, decimals = 2) {
   return num.toFixed(decimals);
 }
 
-function LiveIndicesCard({indices}) {
+const LiveIndicesCard = memo(function LiveIndicesCard({indices}) {
   return (
     <div className="card neutral">
       <div className="section-title">Live Indices</div>
@@ -284,9 +338,9 @@ function LiveIndicesCard({indices}) {
       <div className="mt-4 text-gray-500 text-sm">{indices?.timestamp}</div>
     </div>
   );
-}
+});
 
-function PlatformStatusCard({ brokerStatus }) {
+const PlatformStatusCard = memo(function PlatformStatusCard({ brokerStatus }) {
   const items = [
     { key: "zerodha", label: "Zerodha" },
     { key: "fyers", label: "Fyers" },
@@ -312,16 +366,17 @@ function PlatformStatusCard({ brokerStatus }) {
       </div>
     </div>
   );
-}
+});
 
-function LiveHeaderRow({ indices, brokerStatus }) {
+const LiveHeaderRow = memo(function LiveHeaderRow({ indices, brokerStatus, pnl }) {
   return (
     <div className="grid md:grid-cols-[2fr_1fr] gap-6 items-stretch">
       <LiveIndicesCard indices={indices} />
       <PlatformStatusCard brokerStatus={brokerStatus} />
+      <div className="card neutral h-full"><div className="section-title mb-2 text-base">Live P&L</div><div className={`text-2xl font-bold ${Number(pnl||0)>=0?"text-emerald-400":"text-rose-400"}`}>{Number(pnl||0).toFixed(2)}</div></div>
     </div>
   );
-}
+});
 
 /* ---------------- MOVING AVERAGES CARDS ---------------- */
 
@@ -423,7 +478,7 @@ function ExponentialMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
 
 /* ---------------- DASHBOARD ---------------- */
 
-function DashboardTab({data, brokerStatus}) {
+function DashboardTab({data, brokerStatus, isLoading, advanceDecline}) {
   const { pcr, vix, oi, rsi, indices, niftyavgs, macd } = data;
   const hiddenCardsStorageKey = "dashboardHiddenCards";
   const defaultHiddenCards = {
@@ -434,7 +489,8 @@ function DashboardTab({data, brokerStatus}) {
     niftyPrice: false,
     sma: false,
     ema: false,
-    macd: false
+    macd: false,
+    advanceDecline: false
   };
   
   const [hiddenCards, setHiddenCards] = useState(() => {
@@ -519,6 +575,20 @@ function DashboardTab({data, brokerStatus}) {
     { id: 'niftyPrice', component: <NiftyPriceCard niftyavgs={niftyavgs} isHidden={hiddenCards.niftyPrice} onToggle={() => toggleCard('niftyPrice')} /> },
     { id: 'sma', component: <SimpleMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.sma} onToggle={() => toggleCard('sma')} /> },
     { id: 'ema', component: <ExponentialMovingAveragesCard niftyavgs={niftyavgs} isHidden={hiddenCards.ema} onToggle={() => toggleCard('ema')} /> },
+    { id: 'advanceDecline', component: (
+      <div className={`card neutral ${hiddenCards.advanceDecline ? 'card-hidden' : ''}`}>
+        <ToggleButton isHidden={hiddenCards.advanceDecline} onToggle={() => toggleCard('advanceDecline')} />
+        <div className="section-title">Advance/Decline Ratio</div>
+        {!hiddenCards.advanceDecline && (
+          <>
+            <KeyValue label="Advanced" value={advanceDecline?.advanced}/>
+            <KeyValue label="Declined" value={advanceDecline?.declined}/>
+            <KeyValue label="Ratio" value={advanceDecline?.ratio}/>
+            <div className="mt-3 text-sm break-words">{advanceDecline?.sentiment}</div>
+          </>
+        )}
+      </div>
+    )},
     { id: 'macd', component: (
       <div className={`${getMacdCardClass(macd)} ${hiddenCards.macd ? 'card-hidden' : ''}`}>
         <ToggleButton isHidden={hiddenCards.macd} onToggle={() => toggleCard('macd')} />
@@ -535,12 +605,14 @@ function DashboardTab({data, brokerStatus}) {
     )},
   ];
 
-  const visibleCards = cards.filter(card => !hiddenCards[card.id]);
-  const collapsedCards = cards.filter(card => hiddenCards[card.id]);
+  const visibleCards = useMemo(() => cards.filter(card => !hiddenCards[card.id]), [cards, hiddenCards]);
+  const collapsedCards = useMemo(() => cards.filter(card => hiddenCards[card.id]), [cards, hiddenCards]);
+
+  if (isLoading) return <LoadingCard title="Market Indicators" />;
 
   return (
     <div className="space-y-8">
-      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} pnl={0} />
 
       <div className="grid md:grid-cols-3 gap-6">
         {visibleCards.map(card => (
@@ -803,7 +875,7 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
 
 /* ---------------- OPTIONS ENGINE TAB ---------------- */
 
-function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}) {
+function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled, analytics, sectorRotation}) {
   const { bias, indices } = data;
   const [openStrategy, setOpenStrategy] = useState(null);
   const [expiries, setExpiries] = useState([]);
@@ -852,7 +924,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}
 
   return (
     <div className="space-y-8">
-      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} pnl={analytics?.today_pnl} />
 
       <div className={getCardClass(bias?.bias)}>
         <div className="section-title">Options Strategy Engine</div>
@@ -867,6 +939,19 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}
       </div>
 
       <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} expiries={expiries} onExpiryChange={setSelectedExpiry} />
+
+      <div className="card neutral">
+        <div className="section-title">Sector Rotation Heatmap</div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {(sectorRotation?.sectors || []).map((s) => (
+            <div key={s.name} className={`p-2 rounded ${s.change >= 0 ? 'bg-emerald-700/30' : 'bg-rose-700/30'}`}>
+              <div className="text-sm">{s.name}</div>
+              <div className={`font-semibold ${s.change>=0?'text-emerald-300':'text-rose-300'}`}>{s.change}%</div>
+            </div>
+          ))}
+        </div>
+        <div className="text-sm text-gray-300 mt-3">{sectorRotation?.mood}</div>
+      </div>
 
       <div className="card neutral">
         <div className="section-title">Strategy List</div>
@@ -892,7 +977,7 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled}
   );
 }
 
-function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, activeBroker, setActiveBroker, failoverEnabled, setFailoverEnabled }) {
+function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, activeBroker, setActiveBroker, failoverEnabled, setFailoverEnabled, tradingSettings, refreshTradingSettings }) {
   const [message, setMessage] = useState("");
   const [credentials, setCredentials] = useState({
     zerodha: { api_key: "", api_secret: "", access_token: "" },
@@ -952,6 +1037,17 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
     setMessage(json.error || `Unable to connect ${broker}`);
   };
 
+  const onSettingChange = async (field, value) => {
+    const res = await updateTradingSettings({ [field]: value });
+    setMessage(res.success ? 'Trading settings updated' : (res.error || 'Unable to update settings'));
+    refreshTradingSettings?.();
+  };
+
+  const triggerSummary = async () => {
+    const res = await sendSummaryEmail();
+    setMessage(res.success ? res.message : (res.error || 'Unable to queue summary email'));
+  };
+
   const disconnect = async (broker) => {
     const res = await disconnectBroker(broker);
     if (res.success) {
@@ -961,6 +1057,10 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
     }
     setMessage(res.error || `Unable to disconnect ${broker}`);
   };
+
+  const refreshTradingSettings = () => {};
+
+  const globalState = useMemo(() => ({ tradeAnalytics, recentTrades, tradingSettings }), [tradeAnalytics, recentTrades, tradingSettings]);
 
   useEffect(() => {
     refreshBrokerStatus();
@@ -1063,6 +1163,20 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
           Enable failover trading (try next selected broker if first fails)
         </label>
       </div>
+
+      <div className="card neutral">
+        <div className="section-title">Risk & Automation Settings</div>
+        <div className="grid md:grid-cols-3 gap-3 text-sm">
+          <label className="flex items-center gap-2"><input type="checkbox" checked={!!tradingSettings.paper_trading} onChange={(e)=>onSettingChange('paper_trading', e.target.checked)} /> Paper trading mode</label>
+          <label className="flex items-center gap-2">Daily loss limit
+            <input type="number" className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" value={tradingSettings.daily_loss_limit || 0} onChange={(e)=>onSettingChange('daily_loss_limit', Number(e.target.value))} />
+          </label>
+          <label className="flex items-center gap-2">Summary email
+            <input type="email" className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" value={tradingSettings.summary_email || ''} onChange={(e)=>onSettingChange('summary_email', e.target.value)} />
+          </label>
+        </div>
+        <button onClick={triggerSummary} className="mt-3 px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Send Daily Summary Now</button>
+      </div>
       <div className="text-sm text-gray-300">Selected platform(s) for order execution: {selectedBrokers.join(", ") || "None"}</div>
     </div>
   );
@@ -1099,6 +1213,32 @@ function MMITab({data, brokerStatus}) {
   );
 }
 
+
+function TradeAnalyticsTab({ analytics, recentTrades }) {
+  return (
+    <div className="space-y-6">
+      <div className="grid md:grid-cols-4 gap-4">
+        <div className="card neutral"><div className="section-title">Win Rate</div><div className="text-2xl">{Number(analytics?.win_rate || 0).toFixed(2)}%</div></div>
+        <div className="card neutral"><div className="section-title">Avg Profit</div><div className="text-2xl text-emerald-400">{Number(analytics?.avg_profit || 0).toFixed(2)}</div></div>
+        <div className="card neutral"><div className="section-title">Avg Loss</div><div className="text-2xl text-rose-400">{Number(analytics?.avg_loss || 0).toFixed(2)}</div></div>
+        <div className="card neutral"><div className="section-title">Total Trades</div><div className="text-2xl">{analytics?.total_trades || 0}</div></div>
+      </div>
+      <div className="card neutral">
+        <div className="section-title">Recent Executed Trades</div>
+        <div className="space-y-2 text-sm">
+          {(recentTrades || []).slice(0, 15).map((t, idx) => (
+            <div key={idx} className="flex justify-between border-b border-gray-700 pb-1">
+              <span>{t.timestamp} · {t.broker} · {t.symbol}</span>
+              <span className={t.status?.includes('fail') ? 'text-rose-300' : 'text-emerald-300'}>{t.status}</span>
+            </div>
+          ))}
+          {(!recentTrades || recentTrades.length === 0) && <div className="text-gray-400">No trades yet.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FiiDiiTab() {
   return (
     <div className="bg-black border border-gray-800 rounded-xl min-h-[65vh] flex items-center justify-center">
@@ -1113,7 +1253,7 @@ function FiiDiiTab() {
 /* ---------------- MAIN APP ---------------- */
 
 function App() {
-  const { data } = useAPI();
+  const { data, isLoading, tradeAnalytics, recentTrades, tradingSettings, advanceDecline, sectorRotation } = useAPI();
   const [tab, setTab] = useState("brokers");
   const [selectedBrokers, setSelectedBrokers] = useState(["zerodha"]);
   const [brokerStatus, setBrokerStatus] = useState({});
@@ -1128,6 +1268,10 @@ function App() {
     } catch {}
   };
 
+  const refreshTradingSettings = () => {};
+
+  const globalState = useMemo(() => ({ tradeAnalytics, recentTrades, tradingSettings }), [tradeAnalytics, recentTrades, tradingSettings]);
+
   useEffect(() => {
     refreshBrokerStatus();
   }, []);
@@ -1141,19 +1285,24 @@ function App() {
         <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
         <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
         <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
+        <div className={`tab ${tab==="analytics"?"tab-active":""}`} onClick={()=>setTab("analytics")}>Trade Analytics</div>
       </div>
 
-      {tab==="brokers" && <BrokersTab selectedBrokers={selectedBrokers} setSelectedBrokers={setSelectedBrokers} brokerStatus={brokerStatus} refreshBrokerStatus={refreshBrokerStatus} activeBroker={activeBroker} setActiveBroker={setActiveBroker} failoverEnabled={failoverEnabled} setFailoverEnabled={setFailoverEnabled} />}
-      {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} />}
-      {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} />}
+      <GlobalStateContext.Provider value={globalState}>
+      {tab==="brokers" && <BrokersTab selectedBrokers={selectedBrokers} setSelectedBrokers={setSelectedBrokers} brokerStatus={brokerStatus} refreshBrokerStatus={refreshBrokerStatus} activeBroker={activeBroker} setActiveBroker={setActiveBroker} failoverEnabled={failoverEnabled} setFailoverEnabled={setFailoverEnabled} tradingSettings={tradingSettings} refreshTradingSettings={refreshTradingSettings} />}
+      {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} isLoading={isLoading} advanceDecline={advanceDecline} />}
+      {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} analytics={tradeAnalytics} sectorRotation={sectorRotation} />}
       {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} />}
       {tab==="fii-dii" && <FiiDiiTab />}
+      {tab==="analytics" && <TradeAnalyticsTab analytics={tradeAnalytics} recentTrades={recentTrades} />}
+      </GlobalStateContext.Provider>
 
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+const queryClient = new QueryClient();
+ReactDOM.createRoot(document.getElementById("root")).render(<QueryClientProvider client={queryClient}><App /></QueryClientProvider>);
 
 </script>
 </body>

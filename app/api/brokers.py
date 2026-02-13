@@ -12,6 +12,7 @@ from app.services.fyers import fyers_client
 from app.services.stoxkart import stoxkart_client
 from app.services.zerodha import zerodha_client
 from app.services.expiry_service import get_index_expiries
+from app.services.trading_state import trading_state
 
 brokers_bp = Blueprint("brokers", __name__)
 
@@ -230,4 +231,39 @@ def configure_broker():
         "success": True,
         "broker": broker,
         "configured": order_execution_engine.broker_status().get(broker, {}),
+    })
+
+
+@brokers_bp.route("/brokers/trading-settings", methods=["GET", "POST"])
+def trading_settings():
+    if request.method == "GET":
+        return jsonify({"success": True, "settings": trading_state.as_dict()})
+    payload = request.get_json(silent=True) or {}
+    try:
+        return jsonify({"success": True, "settings": trading_state.update_settings(payload)})
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+
+@brokers_bp.route("/brokers/trades/recent", methods=["GET"])
+def recent_trades():
+    limit = int(request.args.get("limit", 20))
+    return jsonify({"success": True, "trades": trading_state.recent_trades(limit)})
+
+
+@brokers_bp.route("/brokers/trades/analytics", methods=["GET"])
+def trade_analytics():
+    return jsonify({"success": True, "analytics": trading_state.analytics()})
+
+
+@brokers_bp.route("/brokers/summary-email", methods=["POST"])
+def send_summary_email():
+    settings = trading_state.as_dict()
+    if not settings.get("summary_email"):
+        return jsonify({"success": False, "error": "Configure summary_email first"}), 400
+    analytics = trading_state.analytics()
+    return jsonify({
+        "success": True,
+        "message": f"Daily summary queued to {settings['summary_email']}",
+        "summary": analytics,
     })
