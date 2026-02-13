@@ -684,10 +684,8 @@ function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selected
   const [deploymentStats, setDeploymentStats] = useState({ bought: 0, pending: 0 });
   const [activePlanIds, setActivePlanIds] = useState([]);
 
-  if (!data) return null;
-
   useEffect(() => {
-    if (activePlanIds.length === 0) return;
+    if (!data || activePlanIds.length === 0) return;
 
     const interval = setInterval(async () => {
       try {
@@ -708,6 +706,8 @@ function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selected
 
     return () => clearInterval(interval);
   }, [activePlanIds]);
+
+  if (!data) return null;
 
   const handleDeploy = async (e) => {
     e.stopPropagation();
@@ -928,14 +928,10 @@ function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, 
 /* ---------------- OPTIONS ENGINE TAB ---------------- */
 
 function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled, livePnl, onTradeActivity}) {
-  const { bias, indices } = data;
+  const { bias, indices } = data || {};
   const [openStrategy, setOpenStrategy] = useState(null);
   const [expiries, setExpiries] = useState([]);
   const [selectedExpiry, setSelectedExpiry] = useState("");
-
-  if (!bias) return null;
-
-  const handleToggle = (name) => setOpenStrategy(openStrategy === name ? null : name);
 
   useEffect(() => {
     const fetchExpiries = async () => {
@@ -951,6 +947,20 @@ function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled,
 
     fetchExpiries();
   }, []);
+
+  if (!bias) {
+    return (
+      <div className="space-y-8">
+        <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
+        <div className="card neutral">
+          <div className="section-title">Market Options Strategy</div>
+          <div className="text-sm text-gray-400">Waiting for market indicator data to load…</div>
+        </div>
+      </div>
+    );
+  }
+
+  const handleToggle = (name) => setOpenStrategy(openStrategy === name ? null : name);
 
   const strategyOrderBuilders = {
     "Iron Condor": (quantity) => [
