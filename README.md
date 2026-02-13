@@ -43,7 +43,8 @@ Set these environment variables before running app.
 
 ### Zerodha
 - `GET /api/zerodha/login-url`
-- `GET /api/zerodha/callback` (configure this URL as Kite redirect URL)
+- `GET /api/zerodha/callback` (recommended Kite redirect URL)
+- `GET /zerodha/callback` (compatibility route if Kite app is configured without `/api`)
 - `GET /api/zerodha/status`
 - `GET /api/zerodha/profile`
 

@@ -3,6 +3,20 @@ from flask import Blueprint, jsonify, redirect, request
 from app.services.zerodha import zerodha_client
 
 zerodha_bp = Blueprint("zerodha", __name__)
+zerodha_public_bp = Blueprint("zerodha_public", __name__)
+
+
+def _handle_zerodha_callback():
+    request_token = request.args.get("request_token")
+    if not request_token:
+        return "No request_token received", 400
+
+    try:
+        zerodha_client.save_session(request_token)
+    except Exception as exc:
+        return f"Error while generating session: {exc}", 400
+
+    return redirect("/?zerodha=connected")
 
 
 @zerodha_bp.route("/zerodha/status", methods=["GET"])
@@ -35,17 +49,13 @@ def zerodha_login_url():
 
 
 @zerodha_bp.route("/zerodha/callback", methods=["GET"])
-def zerodha_callback():
-    request_token = request.args.get("request_token")
-    if not request_token:
-        return "No request_token received", 400
+def zerodha_callback_api():
+    return _handle_zerodha_callback()
 
-    try:
-        zerodha_client.save_session(request_token)
-    except Exception as exc:
-        return f"Error while generating session: {exc}", 400
 
-    return redirect("/?zerodha=connected")
+@zerodha_public_bp.route("/zerodha/callback", methods=["GET"])
+def zerodha_callback_public():
+    return _handle_zerodha_callback()
 
 
 @zerodha_bp.route("/zerodha/profile", methods=["GET"])
