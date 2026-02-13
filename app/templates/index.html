@@ -294,7 +294,7 @@ function PlatformStatusCard({ brokerStatus }) {
   ];
 
   return (
-    <div className="card neutral py-3 px-4">
+    <div className="card neutral h-full">
       <div className="section-title mb-2 text-base">Trading Platform Status</div>
       <div className="space-y-1.5">
         {items.map((item) => {
@@ -316,7 +316,7 @@ function PlatformStatusCard({ brokerStatus }) {
 
 function LiveHeaderRow({ indices, brokerStatus }) {
   return (
-    <div className="grid md:grid-cols-[2fr_1fr] gap-6 items-start">
+    <div className="grid md:grid-cols-[2fr_1fr] gap-6 items-stretch">
       <LiveIndicesCard indices={indices} />
       <PlatformStatusCard brokerStatus={brokerStatus} />
     </div>
@@ -1021,7 +1021,6 @@ function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refresh
           fields={[
             { name: "api_key", label: "API Key" },
             { name: "api_secret", label: "API Secret", type: "password" },
-            { name: "access_token", label: "Access Token (optional)" },
           ]}
         />
         <BrokerConnectionCard
