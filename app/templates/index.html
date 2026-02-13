@@ -377,7 +377,31 @@ function PlatformStatusCard({ brokerStatus }) {
 }
 
 function LivePnlCard({ livePnl, sourceLabel }) {
-  const [showPnlDetails, setShowPnlDetails] = useState(true);
+  const pnlVisibilityStorageKey = "dashboardShowPnlDetails";
+  const [showPnlDetails, setShowPnlDetails] = useState(() => {
+    try {
+      const savedValue = localStorage.getItem(pnlVisibilityStorageKey);
+      if (savedValue === null) return true;
+      return savedValue === "true";
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(pnlVisibilityStorageKey, String(showPnlDetails));
+  }, [showPnlDetails]);
+
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key !== pnlVisibilityStorageKey || event.newValue === null) return;
+      setShowPnlDetails(event.newValue === "true");
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
   const totalPnl = Number(livePnl?.total_pnl || 0);
   const pnlClass = totalPnl >= 0 ? "text-green-400" : "text-rose-400";
   const brokerLabel = sourceLabel || "Not connected";
