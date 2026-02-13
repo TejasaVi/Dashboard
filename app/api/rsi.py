@@ -1,7 +1,6 @@
 from flask import Blueprint, jsonify
 
 import yfinance as yf
-import pandas as pd
 
 
 def tradingview_rsi(series, period=14):
@@ -77,4 +76,4 @@ def rsi_check():
         else:  # rsi15 > 70
             sentiment = "Strong Sell"
 
-    return jsonify({"rsi1hr": rsi60_value, "rsi15min":rsi15_value , "sentiment": sentiment})
+    return jsonify({"rsi1hr": rsi60_value, "rsi15min": rsi15_value, "sentiment": sentiment})

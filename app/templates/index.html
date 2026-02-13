@@ -12,7 +12,7 @@
 
 <style>
 body { background:#0f172a; color:#e2e8f0; }
-.card { border-radius:14px; padding:20px; border:1px solid #1f2937; transition:0.3s; position: relative; }
+.card { border-radius:14px; padding:20px; border:1px solid #1f2937; transition:0.3s; position: relative; overflow: hidden; }
 .section-title { font-size:18px; font-weight:600; margin-bottom:10px; }
 .tab { cursor:pointer; padding:12px 20px; }
 .tab-active { border-bottom:2px solid #6366f1; }
@@ -68,6 +68,111 @@ body { background:#0f172a; color:#e2e8f0; }
 <script type="text/babel">
 
 const { useState, useEffect } = React;
+
+
+async function getBrokerLoginUrl(broker) {
+  const res = await fetch(`/api/${broker}/login-url`);
+  return res.json();
+}
+
+async function getBrokerStatus() {
+  const res = await fetch("/api/brokers/status");
+  return res.json();
+}
+
+async function getBrokerLivePnl() {
+  const res = await fetch("/api/brokers/pnl");
+  return res.json();
+}
+
+async function switchActiveBroker(broker) {
+  const res = await fetch("/api/brokers/switch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ broker }),
+  });
+  return res.json();
+}
+
+async function placeBrokerOrder(order) {
+  const res = await fetch("/api/brokers/place-order", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(order),
+  });
+  return res.json();
+}
+
+async function deployWithEngine(order) {
+  const res = await fetch("/api/brokers/deploy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(order),
+  });
+  return res.json();
+}
+
+async function processDeploymentEngine(planId) {
+  const res = await fetch("/api/brokers/deploy/process", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(planId ? { plan_id: planId } : {}),
+  });
+  return res.json();
+}
+
+async function getDeploymentStatus(planId) {
+  const res = await fetch(`/api/brokers/deploy/${planId}`);
+  return res.json();
+}
+
+async function configureBrokerCredentials(payload) {
+  const res = await fetch("/api/brokers/configure", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+async function disconnectBroker(broker) {
+  const res = await fetch("/api/brokers/disconnect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ broker }),
+  });
+  return res.json();
+}
+
+const brokerExpiriesCache = {};
+
+async function getBrokerExpiries(symbol = "NIFTY") {
+  const cacheKey = String(symbol || "NIFTY").toUpperCase();
+  const cachedResponse = brokerExpiriesCache[cacheKey];
+
+  if (cachedResponse?.data) {
+    return cachedResponse.data;
+  }
+
+  if (cachedResponse?.promise) {
+    return cachedResponse.promise;
+  }
+
+  const requestPromise = fetch(`/api/brokers/expiries?symbol=${cacheKey}`)
+    .then((res) => res.json())
+    .then((data) => {
+      brokerExpiriesCache[cacheKey] = { data };
+      return data;
+    })
+    .catch((error) => {
+      delete brokerExpiriesCache[cacheKey];
+      throw error;
+    });
+
+  brokerExpiriesCache[cacheKey] = { promise: requestPromise };
+
+  return requestPromise;
+}
 
 const endpoints = {
   pcr: "/api/pcr",
@@ -182,25 +287,183 @@ function ToggleButton({ isHidden, onToggle }) {
   );
 }
 
-function LiveIndicesCard({indices}) {
+function formatIndexValue(value, decimals = 2) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return value ?? "-";
+  return num.toFixed(decimals);
+}
+
+function formatPercent(value, decimals = 2) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  const sign = num > 0 ? "+" : "";
+  return `${sign}${num.toFixed(decimals)}%`;
+}
+
+
+function LiveIndicesCard({ indices, connectedBrokerLabel = null, connectedPlatformLabels = [] }) {
   return (
-    <div className="card neutral">
+    <div className="card neutral h-full">
       <div className="section-title">Live Indices</div>
-      <div className="grid grid-cols-3 gap-6 text-center">
-        <div>
-          <div className="text-3xl font-bold text-cyan-400">{indices?.NIFTY50}</div>
+      <div className="grid grid-cols-3 gap-3 md:gap-4 text-center">
+        <div className="min-w-0">
+          <div className="text-[clamp(1.25rem,1.8vw,2rem)] font-bold leading-tight text-cyan-400">{formatIndexValue(indices?.NIFTY50)}</div>
           <div className="text-gray-400">NIFTY50</div>
         </div>
-        <div>
-          <div className="text-3xl font-bold text-emerald-400">{indices?.BANKNIFTY}</div>
+        <div className="min-w-0">
+          <div className="text-[clamp(1.25rem,1.8vw,2rem)] font-bold leading-tight text-emerald-400">{formatIndexValue(indices?.BANKNIFTY)}</div>
           <div className="text-gray-400">BANKNIFTY</div>
         </div>
-        <div>
-          <div className="text-3xl font-bold text-rose-400">{indices?.SENSEX}</div>
+        <div className="min-w-0">
+          <div className="text-[clamp(1.25rem,1.8vw,2rem)] font-bold leading-tight text-rose-400">{formatIndexValue(indices?.SENSEX, 2)}</div>
           <div className="text-gray-400">SENSEX</div>
         </div>
       </div>
       <div className="mt-4 text-gray-500 text-sm">{indices?.timestamp}</div>
+      <div className="mt-1 text-xs text-gray-400">
+        NSE Capital Market: <span className={indices?.market?.isOpen ? "text-green-400" : "text-amber-400"}>{indices?.market?.status ?? "Unknown"}</span>
+        {connectedBrokerLabel && (
+          <>
+            <span className="mx-1 text-gray-500">•</span>
+            <span>Broker: <span className="text-cyan-300">{connectedBrokerLabel}</span></span>
+          </>
+        )}
+      </div>
+      {connectedPlatformLabels.length > 0 && (
+        <div className="mt-3 border-t border-gray-800 pt-3">
+          <div className="text-xs text-gray-400 mb-1">Trading Platforms</div>
+          <div className="flex flex-wrap gap-2">
+            {connectedPlatformLabels.map((label) => (
+              <span key={label} className="text-xs px-2 py-1 rounded-full border border-green-500/60 bg-green-500/10 text-green-300">
+                {label} Connected
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatCurrency(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  return `₹${num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function PlatformStatusCard({ brokerStatus }) {
+  const items = [
+    { key: "zerodha", label: "Zerodha" },
+    { key: "fyers", label: "Fyers" },
+    { key: "stoxkart", label: "Stoxkart" },
+  ];
+  const connectedItems = items.filter((item) => !!brokerStatus?.brokers?.[item.key]?.connected);
+
+  return (
+    <div className="card neutral h-full">
+      <div className="section-title mb-2 text-base">Trading Platform Status</div>
+      <div className="space-y-1.5">
+        {connectedItems.length === 0 ? (
+          <div className="text-xs text-gray-400">No connected platforms</div>
+        ) : connectedItems.map((item) => (
+          <div key={item.key} className="flex items-center justify-between text-xs">
+            <span>{item.label}</span>
+            <span className="font-semibold text-green-400">Connected</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LivePnlCard({ livePnl, sourceLabel }) {
+  const pnlVisibilityStorageKey = "dashboardShowPnlDetails";
+  const [showPnlDetails, setShowPnlDetails] = useState(() => {
+    try {
+      const savedValue = localStorage.getItem(pnlVisibilityStorageKey);
+      if (savedValue === null) return true;
+      return savedValue === "true";
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(pnlVisibilityStorageKey, String(showPnlDetails));
+  }, [showPnlDetails]);
+
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key !== pnlVisibilityStorageKey || event.newValue === null) return;
+      setShowPnlDetails(event.newValue === "true");
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
+  const totalPnl = Number(livePnl?.total_pnl || 0);
+  const pnlClass = totalPnl >= 0 ? "text-green-400" : "text-rose-400";
+  const brokerLabel = sourceLabel || "Not connected";
+  const maskedValue = "*****";
+
+  return (
+    <div className="card neutral h-full">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="section-title text-base">Live P&amp;L</div>
+        <button
+          type="button"
+          onClick={() => setShowPnlDetails((prev) => !prev)}
+          className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-800"
+          aria-label={showPnlDetails ? "Hide P&L details" : "Show P&L details"}
+          title={showPnlDetails ? "Hide P&L details" : "Show P&L details"}
+        >
+          {showPnlDetails ? "👁" : "🙈"}
+        </button>
+      </div>
+      <div className={`text-2xl font-bold ${showPnlDetails ? pnlClass : "text-gray-300"}`}>
+        {showPnlDetails ? formatCurrency(totalPnl) : maskedValue}
+      </div>
+      <div className="mt-2 space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-gray-400">Day MTM</span>
+          <span>{showPnlDetails ? formatCurrency(livePnl?.day_m2m) : maskedValue}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-gray-400">Open Positions</span>
+          <span>{showPnlDetails ? (livePnl?.open_positions ?? 0) : maskedValue}</span>
+        </div>
+      </div>
+      <div className="mt-3 text-[11px] text-gray-500">Broker: {brokerLabel}</div>
+    </div>
+  );
+}
+
+function LiveHeaderRow({ indices, brokerStatus, livePnl, showLivePnl = false, showPlatformStatus = true, mergePlatformStatusIntoIndices = false }) {
+  const connectedBrokers = Object.entries(brokerStatus?.brokers || {})
+    .filter(([, state]) => !!state?.connected)
+    .map(([name]) => name);
+
+  const sourceBroker = livePnl?.source_broker
+    || connectedBrokers[0]
+    || null;
+
+  const sourceLabel = sourceBroker
+    ? sourceBroker.charAt(0).toUpperCase() + sourceBroker.slice(1)
+    : null;
+
+  const connectedPlatformLabels = connectedBrokers.map((name) => name.charAt(0).toUpperCase() + name.slice(1));
+  const shouldShowPlatformCard = showPlatformStatus && !mergePlatformStatusIntoIndices;
+
+  const gridClass = showLivePnl
+    ? (shouldShowPlatformCard ? "md:grid-cols-3" : "md:grid-cols-[2fr_1fr]")
+    : "md:grid-cols-[2fr_1fr]";
+
+  return (
+    <div className={`grid gap-6 items-stretch ${gridClass}`}>
+      <LiveIndicesCard indices={indices} connectedPlatformLabels={mergePlatformStatusIntoIndices ? connectedPlatformLabels : []} />
+      {shouldShowPlatformCard && <PlatformStatusCard brokerStatus={brokerStatus} />}
+      {showLivePnl && <LivePnlCard livePnl={livePnl} sourceLabel={sourceLabel} />}
     </div>
   );
 }
@@ -305,7 +568,7 @@ function ExponentialMovingAveragesCard({niftyavgs, isHidden, onToggle}) {
 
 /* ---------------- DASHBOARD ---------------- */
 
-function DashboardTab({data}) {
+function DashboardTab({data, brokerStatus, livePnl}) {
   const { pcr, vix, oi, rsi, indices, niftyavgs, macd } = data;
   const hiddenCardsStorageKey = "dashboardHiddenCards";
   const defaultHiddenCards = {
@@ -422,7 +685,7 @@ function DashboardTab({data}) {
 
   return (
     <div className="space-y-8">
-      <LiveIndicesCard indices={indices} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
 
       <div className="grid md:grid-cols-3 gap-6">
         {visibleCards.map(card => (
@@ -438,17 +701,70 @@ function DashboardTab({data}) {
 
 /* ---------------- STRATEGY ACCORDION ---------------- */
 
-function StrategyAccordion({ name, data, isOpen, onToggle }) {
+function StrategyAccordion({ name, data, isOpen, onToggle, buildOrders, selectedBrokers, failoverEnabled, expiryDate, onTradeActivity }) {
   const [deployed, setDeployed] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [deployMessage, setDeployMessage] = useState("");
+  const [deploymentStats, setDeploymentStats] = useState({ bought: 0, pending: 0 });
+  const [activePlanIds, setActivePlanIds] = useState([]);
+
+  useEffect(() => {
+    if (!data || activePlanIds.length === 0) return;
+
+    const interval = setInterval(async () => {
+      try {
+        let bought = 0;
+        let pending = 0;
+        for (const planId of activePlanIds) {
+          await processDeploymentEngine(planId);
+          const status = await getDeploymentStatus(planId);
+          const plan = status?.plan || {};
+          bought += Number(plan.bought_lots || 0);
+          pending += Number(plan.pending_lots || 0);
+        }
+        setDeploymentStats({ bought, pending });
+      } catch {
+        // keep UI quiet during polling failures
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [activePlanIds]);
 
   if (!data) return null;
 
-  const handleDeploy = (e) => {
+  const handleDeploy = async (e) => {
     e.stopPropagation();
-    console.log(`Executed strategy: ${name} with quantity: ${quantity}`);
-    setDeployed(true);
-    setTimeout(() => setDeployed(false), 1500);
+
+    try {
+      const orders = buildOrders(quantity);
+      let bought = 0;
+      let pending = 0;
+      const createdPlanIds = [];
+      for (const order of orders) {
+        const result = await deployWithEngine({
+          ...order,
+          brokers: selectedBrokers,
+          failover_enabled: failoverEnabled,
+          metadata: { ...(order.metadata || {}), expiry_date: expiryDate },
+        });
+        if (!result.success) {
+          throw new Error(result.error || "Deployment creation failed");
+        }
+        const plan = result?.plan || {};
+        createdPlanIds.push(plan.plan_id);
+        bought += Number(plan.bought_lots || 0);
+        pending += Number(plan.pending_lots || 0);
+      }
+      setActivePlanIds(createdPlanIds.filter(Boolean));
+      setDeploymentStats({ bought, pending });
+      setDeployMessage("Deployment queued (engine will process in ticks)");
+      onTradeActivity?.();
+      setDeployed(true);
+      setTimeout(() => setDeployed(false), 1500);
+    } catch (err) {
+      setDeployMessage(err.message);
+    }
   };
 
   return (
@@ -484,8 +800,9 @@ function StrategyAccordion({ name, data, isOpen, onToggle }) {
             >
               Deploy
             </button>
-            {deployed && <span className="text-green-400 font-medium">Successfully deployed</span>}
+            {deployMessage && <span className="text-green-400 font-medium">{deployMessage}</span>}
           </div>
+          <div className="text-sm text-cyan-300">Bought lots: {deploymentStats.bought} | Pending lots: {deploymentStats.pending}</div>
         </div>
       )}
     </div>
@@ -494,31 +811,104 @@ function StrategyAccordion({ name, data, isOpen, onToggle }) {
 
 /* ---------------- ATM OPTIONS CARD ---------------- */
 
-function ATMOptionsCard({ ce, pe }) {
+function ATMOptionsCard({ ce, pe, selectedBrokers, failoverEnabled, expiryDate, expiries, onExpiryChange, onTradeActivity }) {
   const [ceQty, setCeQty] = useState(1);
   const [peQty, setPeQty] = useState(1);
-  const [ceDeployed, setCeDeployed] = useState(false);
-  const [peDeployed, setPeDeployed] = useState(false);
+  const [ceMessage, setCeMessage] = useState("");
+  const [peMessage, setPeMessage] = useState("");
+  const [cePlanId, setCePlanId] = useState("");
+  const [pePlanId, setPePlanId] = useState("");
+  const [ceStats, setCeStats] = useState({ bought: 0, pending: 0 });
+  const [peStats, setPeStats] = useState({ bought: 0, pending: 0 });
 
-  const handleCeDeploy = () => {
-    console.log("Deployed CE strike", { ce, ceQty });
-    setCeDeployed(true);
-    setTimeout(() => setCeDeployed(false), 1500);
+  useEffect(() => {
+    if (!cePlanId) return;
+    const interval = setInterval(async () => {
+      try {
+        await processDeploymentEngine(cePlanId);
+        const status = await getDeploymentStatus(cePlanId);
+        const plan = status?.plan || {};
+        setCeStats({ bought: Number(plan.bought_lots || 0), pending: Number(plan.pending_lots || 0) });
+      } catch {
+        // ignore transient errors
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [cePlanId]);
+
+  useEffect(() => {
+    if (!pePlanId) return;
+    const interval = setInterval(async () => {
+      try {
+        await processDeploymentEngine(pePlanId);
+        const status = await getDeploymentStatus(pePlanId);
+        const plan = status?.plan || {};
+        setPeStats({ bought: Number(plan.bought_lots || 0), pending: Number(plan.pending_lots || 0) });
+      } catch {
+        // ignore transient errors
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [pePlanId]);
+
+  const handleCeDeploy = async () => {
+    try {
+      const result = await deployWithEngine({
+        index_name: "NIFTY",
+        strike: ce,
+        option_type: "CE",
+        quantity: ceQty,
+        transaction_type: "BUY",
+        brokers: selectedBrokers,
+        failover_enabled: failoverEnabled,
+        metadata: { expiry_date: expiryDate },
+      });
+      const plan = result?.plan || {};
+      setCePlanId(plan.plan_id || "");
+      setCeStats({ bought: Number(plan.bought_lots || 0), pending: Number(plan.pending_lots || 0) });
+      if (result.success) onTradeActivity?.();
+      setCeMessage(result.success ? "Deployment queued (engine tick pending)" : (result.error || "Deployment failed"));
+    } catch (err) {
+      setCeMessage(err.message);
+    }
   };
 
-  const handlePeDeploy = () => {
-    console.log("Deployed PE strike", { pe, peQty });
-    setPeDeployed(true);
-    setTimeout(() => setPeDeployed(false), 1500);
+  const handlePeDeploy = async () => {
+    try {
+      const result = await deployWithEngine({
+        index_name: "NIFTY",
+        strike: pe,
+        option_type: "PE",
+        quantity: peQty,
+        transaction_type: "BUY",
+        brokers: selectedBrokers,
+        failover_enabled: failoverEnabled,
+        metadata: { expiry_date: expiryDate },
+      });
+      const plan = result?.plan || {};
+      setPePlanId(plan.plan_id || "");
+      setPeStats({ bought: Number(plan.bought_lots || 0), pending: Number(plan.pending_lots || 0) });
+      if (result.success) onTradeActivity?.();
+      setPeMessage(result.success ? "Deployment queued (engine tick pending)" : (result.error || "Deployment failed"));
+    } catch (err) {
+      setPeMessage(err.message);
+    }
   };
 
   return (
     <div className="card neutral mt-4 p-4">
       <div className="section-title">ATM Options</div>
 
-      <div className="grid grid-cols-1 gap-6 mt-2">
+      <div className="flex items-center gap-3 text-sm mt-1">
+        <span className="text-gray-300">Expiry:</span>
+        <select className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white min-w-[160px]" value={expiryDate} onChange={(e) => onExpiryChange?.(e.target.value)}>
+          {(expiries || [expiryDate]).filter(Boolean).map((exp) => (
+            <option key={exp} value={exp}>{exp}</option>
+          ))}
+        </select>
+      </div>
 
-        {/* CE Strike */}
+      <div className="grid grid-cols-1 gap-6 mt-2">
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
@@ -526,30 +916,18 @@ function ATMOptionsCard({ ce, pe }) {
               <div className="text-sm text-gray-200">{ce ?? "-"}</div>
             </div>
             <div className="flex gap-2">
-              <select
-                className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
-                value={ceQty}
-                onChange={(e) => setCeQty(Number(e.target.value))}
-              >
-                {[...Array(100)].map((_, i) => (
-                  <option key={i+1} value={i+1}>{i+1}</option>
-                ))}
+              <select className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" value={ceQty} onChange={(e) => setCeQty(Number(e.target.value))}>
+                {[...Array(100)].map((_, i) => (<option key={i+1} value={i+1}>{i+1}</option>))}
               </select>
-              <button
-                onClick={handleCeDeploy}
-                className={`px-4 py-2 rounded-md text-white ${ceDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
-              >
-                Deploy CE
-              </button>
-              {ceDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+              <button onClick={handleCeDeploy} className="px-4 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500">Deploy CE</button>
             </div>
           </div>
+          {ceMessage && <div className="text-sm text-cyan-300">{ceMessage}</div>}
+          <div className="text-xs text-cyan-200">Bought lots: {ceStats.bought} | Pending lots: {ceStats.pending}</div>
         </div>
 
-        {/* Separator Line */}
         <div className="border-t border-gray-600 mx-4"></div>
 
-        {/* PE Strike */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
@@ -557,26 +935,15 @@ function ATMOptionsCard({ ce, pe }) {
               <div className="text-sm text-gray-200">{pe ?? "-"}</div>
             </div>
             <div className="flex gap-2">
-              <select
-                className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white"
-                value={peQty}
-                onChange={(e) => setPeQty(Number(e.target.value))}
-              >
-                {[...Array(100)].map((_, i) => (
-                  <option key={i+1} value={i+1}>{i+1}</option>
-                ))}
+              <select className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white" value={peQty} onChange={(e) => setPeQty(Number(e.target.value))}>
+                {[...Array(100)].map((_, i) => (<option key={i+1} value={i+1}>{i+1}</option>))}
               </select>
-              <button
-                onClick={handlePeDeploy}
-                className={`px-4 py-2 rounded-md text-white ${peDeployed ? "bg-green-500 glow-green" : "bg-indigo-600 hover:bg-indigo-500"}`}
-              >
-                Deploy PE
-              </button>
-              {peDeployed && <span className="text-green-400 font-medium">Deployed</span>}
+              <button onClick={handlePeDeploy} className="px-4 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500">Deploy PE</button>
             </div>
           </div>
+          {peMessage && <div className="text-sm text-cyan-300">{peMessage}</div>}
+          <div className="text-xs text-cyan-200">Bought lots: {peStats.bought} | Pending lots: {peStats.pending}</div>
         </div>
-
       </div>
     </div>
   );
@@ -584,17 +951,66 @@ function ATMOptionsCard({ ce, pe }) {
 
 /* ---------------- OPTIONS ENGINE TAB ---------------- */
 
-function OptionsEngineTab({data}) {
-  const { bias, indices } = data;
+function OptionsEngineTab({data, selectedBrokers, brokerStatus, failoverEnabled, livePnl, onTradeActivity}) {
+  const { bias, indices } = data || {};
   const [openStrategy, setOpenStrategy] = useState(null);
+  const [expiries, setExpiries] = useState([]);
+  const [selectedExpiry, setSelectedExpiry] = useState("");
 
-  if (!bias) return null;
+  useEffect(() => {
+    const fetchExpiries = async () => {
+      try {
+        const response = await getBrokerExpiries("NIFTY");
+        const options = response?.expiries || [];
+        setExpiries(options);
+        if (options.length > 0) setSelectedExpiry((prev) => prev || options[0]);
+      } catch {
+        setExpiries([]);
+      }
+    };
+
+    fetchExpiries();
+  }, []);
+
+  if (!bias) {
+    return (
+      <div className="space-y-8">
+        <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
+        <div className="card neutral">
+          <div className="section-title">Market Options Strategy</div>
+          <div className="text-sm text-gray-400">Waiting for market indicator data to load…</div>
+        </div>
+      </div>
+    );
+  }
 
   const handleToggle = (name) => setOpenStrategy(openStrategy === name ? null : name);
 
+  const strategyOrderBuilders = {
+    "Iron Condor": (quantity) => [
+      { index_name: "NIFTY", strike: bias?.strikes?.iron_condor?.sell_ce, option_type: "CE", transaction_type: "SELL", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.iron_condor?.buy_ce, option_type: "CE", transaction_type: "BUY", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.iron_condor?.sell_pe, option_type: "PE", transaction_type: "SELL", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.iron_condor?.buy_pe, option_type: "PE", transaction_type: "BUY", quantity },
+    ].filter((o) => o.strike),
+    "Calendar": (quantity) => [
+      { index_name: "NIFTY", strike: bias?.strikes?.calendar?.ce_atm, option_type: "CE", transaction_type: "BUY", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.calendar?.pe_atm, option_type: "PE", transaction_type: "BUY", quantity },
+    ].filter((o) => o.strike),
+    "Call Spread": (quantity) => [
+      { index_name: "NIFTY", strike: bias?.strikes?.spread_ce?.buy, option_type: "CE", transaction_type: "BUY", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.spread_ce?.sell, option_type: "CE", transaction_type: "SELL", quantity },
+    ].filter((o) => o.strike),
+    "Put Spread": (quantity) => [
+      { index_name: "NIFTY", strike: bias?.strikes?.spread_pe?.buy, option_type: "PE", transaction_type: "BUY", quantity },
+      { index_name: "NIFTY", strike: bias?.strikes?.spread_pe?.sell, option_type: "PE", transaction_type: "SELL", quantity },
+    ].filter((o) => o.strike),
+    "Butterfly": () => [],
+  };
+
   return (
     <div className="space-y-8">
-      <LiveIndicesCard indices={indices} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
 
       <div className={getCardClass(bias?.bias)}>
         <div className="section-title">Options Strategy Engine</div>
@@ -608,55 +1024,248 @@ function OptionsEngineTab({data}) {
         </div>
       </div>
 
-      <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} />
+      <ATMOptionsCard ce={bias?.strikes?.ce_strike} pe={bias?.strikes?.pe_strike} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} expiries={expiries} onExpiryChange={setSelectedExpiry} onTradeActivity={onTradeActivity} />
 
       <div className="card neutral">
         <div className="section-title">Strategy List</div>
+        <div className="mb-3 flex items-center gap-3 text-sm">
+          <span className="text-gray-300">Expiry Date</span>
+          <select
+            className="px-2 py-1 rounded bg-gray-800 border border-gray-600 text-white min-w-[170px]"
+            value={selectedExpiry}
+            onChange={(e) => setSelectedExpiry(e.target.value)}
+          >
+            {expiries.length === 0 && <option value="">No expiry data</option>}
+            {expiries.map((exp) => (<option key={exp} value={exp}>{exp}</option>))}
+          </select>
+        </div>
 
-        <StrategyAccordion
-          name="Butterfly"
-          data={bias?.strikes?.butterfly}
-          isOpen={openStrategy === "Butterfly"}
-          onToggle={handleToggle}
-        />
-        <StrategyAccordion
-          name="Iron Condor"
-          data={bias?.strikes?.iron_condor}
-          isOpen={openStrategy === "Iron Condor"}
-          onToggle={handleToggle}
-        />
-        <StrategyAccordion
-          name="Calendar"
-          data={bias?.strikes?.calendar}
-          isOpen={openStrategy === "Calendar"}
-          onToggle={handleToggle}
-        />
-        <StrategyAccordion
-          name="Call Spread"
-          data={bias?.strikes?.spread_ce}
-          isOpen={openStrategy === "Call Spread"}
-          onToggle={handleToggle}
-        />
-        <StrategyAccordion
-          name="Put Spread"
-          data={bias?.strikes?.spread_pe}
-          isOpen={openStrategy === "Put Spread"}
-          onToggle={handleToggle}
-        />
+        <StrategyAccordion name="Butterfly" data={bias?.strikes?.butterfly} isOpen={openStrategy === "Butterfly"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Butterfly"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} onTradeActivity={onTradeActivity} />
+        <StrategyAccordion name="Iron Condor" data={bias?.strikes?.iron_condor} isOpen={openStrategy === "Iron Condor"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Iron Condor"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} onTradeActivity={onTradeActivity} />
+        <StrategyAccordion name="Calendar" data={bias?.strikes?.calendar} isOpen={openStrategy === "Calendar"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Calendar"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} onTradeActivity={onTradeActivity} />
+        <StrategyAccordion name="Call Spread" data={bias?.strikes?.spread_ce} isOpen={openStrategy === "Call Spread"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Call Spread"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} onTradeActivity={onTradeActivity} />
+        <StrategyAccordion name="Put Spread" data={bias?.strikes?.spread_pe} isOpen={openStrategy === "Put Spread"} onToggle={handleToggle} buildOrders={strategyOrderBuilders["Put Spread"]} selectedBrokers={selectedBrokers} failoverEnabled={failoverEnabled} expiryDate={selectedExpiry} onTradeActivity={onTradeActivity} />
       </div>
+    </div>
+  );
+}
+
+function BrokersTab({ selectedBrokers, setSelectedBrokers, brokerStatus, refreshBrokerStatus, onSkip, onConnectedDisconnect }) {
+  const [message, setMessage] = useState("");
+  const [selectedBroker, setSelectedBroker] = useState("zerodha");
+  const [credentials, setCredentials] = useState({
+    zerodha: { api_key: "", api_secret: "", access_token: "" },
+    fyers: { api_key: "", api_secret: "", redirect_uri: "", access_token: "" },
+    stoxkart: {
+      api_key: "",
+      api_secret: "",
+      redirect_uri: "",
+      auth_base_url: "",
+      token_url: "",
+      api_base_url: "",
+      access_token: "",
+    },
+  });
+
+  const toggleBroker = (broker) => {
+    setSelectedBrokers((prev) => prev.includes(broker) ? prev.filter((b) => b !== broker) : [...prev, broker]);
+  };
+
+  const onFieldChange = (broker, field, value) => {
+    setCredentials((prev) => ({
+      ...prev,
+      [broker]: {
+        ...prev[broker],
+        [field]: value,
+      },
+    }));
+  };
+
+  const configureBroker = async (broker) => {
+    const payload = { broker, ...credentials[broker] };
+    const res = await configureBrokerCredentials(payload);
+    if (res.success) {
+      setMessage(`Configured ${broker} successfully`);
+      refreshBrokerStatus();
+      return;
+    }
+    setMessage(res.error || `Unable to configure ${broker}`);
+  };
+
+  const connect = async (broker) => {
+    const json = await getBrokerLoginUrl(broker);
+    if (json.login_url) {
+      window.location.href = json.login_url;
+      return;
+    }
+    setMessage(json.error || `Unable to connect ${broker}`);
+  };
+
+  const disconnect = async (broker, redirectToLanding = false) => {
+    const res = await disconnectBroker(broker);
+    if (res.success) {
+      setMessage(`Disconnected ${broker} successfully`);
+      refreshBrokerStatus();
+      if (redirectToLanding) {
+        onConnectedDisconnect();
+      }
+      return;
+    }
+    setMessage(res.error || `Unable to disconnect ${broker}`);
+  };
+
+  useEffect(() => {
+    refreshBrokerStatus();
+  }, []);
+
+  const brokerMeta = {
+    zerodha: {
+      title: "Zerodha",
+      fields: [
+        { name: "api_key", label: "API Key" },
+        { name: "api_secret", label: "API Secret", type: "password" },
+      ],
+    },
+    fyers: {
+      title: "Fyers",
+      fields: [
+        { name: "api_key", label: "API Key / Client ID" },
+        { name: "api_secret", label: "API Secret", type: "password" },
+        { name: "redirect_uri", label: "Redirect URI (optional)" },
+        { name: "access_token", label: "Access Token (optional)" },
+      ],
+    },
+    stoxkart: {
+      title: "Stoxkart",
+      fields: [
+        { name: "api_key", label: "API Key / Client ID" },
+        { name: "api_secret", label: "API Secret", type: "password" },
+        { name: "redirect_uri", label: "Redirect URI (optional)" },
+        { name: "auth_base_url", label: "Auth Base URL (optional)" },
+        { name: "token_url", label: "Token URL (optional)" },
+        { name: "api_base_url", label: "API Base URL (optional)" },
+        { name: "access_token", label: "Access Token (optional)" },
+      ],
+    },
+  };
+
+  const activeMeta = brokerMeta[selectedBroker];
+  const activeState = brokerStatus?.brokers?.[selectedBroker] || {};
+  const brokerCreds = credentials[selectedBroker] || {};
+  const hasConnectedBroker = Object.entries(brokerStatus?.brokers || {}).find(([, state]) => !!state?.connected);
+  const connectedBrokerName = hasConnectedBroker?.[0] || null;
+  const connectedBrokerLabel = connectedBrokerName
+    ? connectedBrokerName.charAt(0).toUpperCase() + connectedBrokerName.slice(1)
+    : null;
+
+  useEffect(() => {
+    if (!connectedBrokerName) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      onSkip();
+    }, 3000);
+
+    return () => clearTimeout(timeout);
+  }, [connectedBrokerName, onSkip]);
+
+  if (connectedBrokerLabel) {
+    return (
+      <div className="space-y-6 max-w-3xl mx-auto">
+        <div className="card neutral">
+          <div className="rounded-md border border-green-500/70 bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+            CONNECTED TO {connectedBrokerLabel.toUpperCase()}
+          </div>
+          <div className="mt-4">
+            <button
+              onClick={() => disconnect(connectedBrokerName, true)}
+              className="px-3 py-2 rounded-md text-white bg-rose-600 hover:bg-rose-500 text-sm"
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-3xl mx-auto">
+      <div className="card neutral">
+        <div className="section-title">Connect Broker</div>
+
+        <div className="mt-2">
+          <select
+            className="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-sm"
+            value={selectedBroker}
+            onChange={(e) => setSelectedBroker(e.target.value)}
+          >
+            {Object.entries(brokerMeta).map(([key, meta]) => (
+              <option key={key} value={key}>{meta.title}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mt-4 space-y-2 text-sm">
+          <div>Configured: <span className="font-semibold">{activeState.configured ? "Yes" : "No"}</span></div>
+          <div>Connected: <span className="font-semibold">{activeState.connected ? "Yes" : "No"}</span></div>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {activeMeta.fields.map((field) => (
+            <input
+              key={field.name}
+              type={field.type || "text"}
+              placeholder={field.label}
+              className="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-sm"
+              value={brokerCreds[field.name] || ""}
+              onChange={(e) => onFieldChange(selectedBroker, field.name, e.target.value)}
+            />
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between mt-4 gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => configureBroker(selectedBroker)} className="px-3 py-2 rounded-md text-white bg-emerald-600 hover:bg-emerald-500 text-sm">Save Keys</button>
+            {!activeState.connected && (
+              <button onClick={() => connect(selectedBroker)} className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Connect</button>
+            )}
+            <button
+              onClick={() => disconnect(selectedBroker)}
+              className="px-3 py-2 rounded-md text-white bg-rose-600 hover:bg-rose-500 text-sm disabled:bg-gray-600 disabled:cursor-not-allowed"
+              disabled={!activeState.connected}
+            >
+              Disconnect
+            </button>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={selectedBrokers.includes(selectedBroker)} onChange={() => toggleBroker(selectedBroker)} />
+            Use for deploy
+          </label>
+        </div>
+
+        <div className="mt-4 flex gap-3 justify-end">
+          <button onClick={onSkip} className="px-3 py-2 rounded-md text-white bg-gray-700 hover:bg-gray-600 text-sm">Skip</button>
+        </div>
+      </div>
+      {message && <div className="text-sm text-emerald-300">{message}</div>}
+      <div className="text-sm text-gray-300">Selected platform(s) for order execution: {selectedBrokers.join(", ") || "None"}</div>
     </div>
   );
 }
 
 /* ---------------- MMI ---------------- */
 
-function MMITab({data}) {
+function MMITab({data, brokerStatus, livePnl}) {
   const { mmi, indices } = data;
   if (!mmi) return null;
 
+  const marketStates = indices?.marketStates || [];
+  const indexSnapshot = indices?.indexSnapshot || {};
   return (
     <div className="space-y-8">
-      <LiveIndicesCard indices={indices} />
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
 
       <div className={getCardClass(mmi?.zone)}>
         <div className="section-title">Market Mood Index (Investment)</div>
@@ -675,16 +1284,58 @@ function MMITab({data}) {
           </div>
         )}
       </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="card neutral">
+          <div className="section-title">NSE Market Sessions</div>
+          {marketStates.length === 0 ? (
+            <div className="text-sm text-gray-400">Session data unavailable.</div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {marketStates.map((state, idx) => (
+                <div key={`${state?.market || 'market'}-${idx}`} className="flex items-center justify-between border-b border-gray-800 pb-1 last:border-0">
+                  <span className="text-gray-300">{state?.market || 'Unknown'}</span>
+                  <span className={state?.isOpen ? "text-green-400 font-semibold" : "text-amber-400 font-semibold"}>{state?.status || 'Unknown'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card neutral">
+          <div className="section-title">NSE Broader Index Snapshot</div>
+          <div className="space-y-2 text-sm">
+            {Object.entries(indexSnapshot).length === 0 && (
+              <div className="text-gray-400">Snapshot data unavailable.</div>
+            )}
+            {Object.entries(indexSnapshot).map(([name, values]) => (
+              <div key={name} className="border-b border-gray-800 pb-2 last:border-0">
+                <div className="font-semibold text-gray-200">{name}</div>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <KeyValue label="Last" value={formatIndexValue(values?.last)} />
+                  <KeyValue label="Change %" value={formatPercent(values?.percentChange)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function FiiDiiTab() {
+function FiiDiiTab({ data, brokerStatus, livePnl }) {
+  const indices = data?.indices;
+
   return (
-    <div className="bg-black border border-gray-800 rounded-xl min-h-[65vh] flex items-center justify-center">
-      <div className="text-center px-6">
-        <div className="text-xl font-semibold text-gray-200">FII DII Data</div>
-        <div className="text-sm text-gray-500 mt-2">Data view coming soon.</div>
+    <div className="space-y-8">
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
+
+      <div className="bg-black border border-gray-800 rounded-xl min-h-[65vh] flex items-center justify-center">
+        <div className="text-center px-6">
+          <div className="text-xl font-semibold text-gray-200">FII DII Data</div>
+          <div className="text-sm text-gray-500 mt-2">Data view coming soon.</div>
+        </div>
       </div>
     </div>
   );
@@ -695,21 +1346,78 @@ function FiiDiiTab() {
 function App() {
   const { data } = useAPI();
   const [tab, setTab] = useState("dashboard");
+  const [selectedBrokers, setSelectedBrokers] = useState(["zerodha"]);
+  const [brokerStatus, setBrokerStatus] = useState({});
+  const [livePnl, setLivePnl] = useState({ success: true, total_pnl: 0, day_m2m: 0, open_positions: 0, source: "Not initialized" });
+  const [hasTradeActivity, setHasTradeActivity] = useState(false);
+  const failoverEnabled = false;
+  const isBrokerSetupPage = window.location.pathname === "/broker-setup";
+
+  const refreshBrokerStatus = async () => {
+    try {
+      const status = await getBrokerStatus();
+      setBrokerStatus(status);
+    } catch {}
+  };
+
+  const refreshLivePnl = async () => {
+    if (!hasTradeActivity) {
+      setLivePnl({ success: true, total_pnl: 0, day_m2m: 0, open_positions: 0, source: "No trades yet" });
+      return;
+    }
+    try {
+      const pnl = await getBrokerLivePnl();
+      setLivePnl(pnl);
+    } catch {}
+  };
+
+  const registerTradeActivity = () => {
+    setHasTradeActivity(true);
+  };
+
+  const finishBrokerSetup = () => {
+    window.location.href = "/";
+  };
+
+  useEffect(() => {
+    refreshBrokerStatus();
+  }, []);
+
+  useEffect(() => {
+    refreshLivePnl();
+    const interval = setInterval(refreshLivePnl, 5000);
+    return () => clearInterval(interval);
+  }, [hasTradeActivity]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {isBrokerSetupPage ? (
+        <BrokersTab
+          selectedBrokers={selectedBrokers}
+          setSelectedBrokers={setSelectedBrokers}
+          brokerStatus={brokerStatus}
+          refreshBrokerStatus={refreshBrokerStatus}
+          onSkip={finishBrokerSetup}
+          onConnectedDisconnect={finishBrokerSetup}
+        />
+      ) : (
+        <>
+          <div className="flex items-center justify-between border-b border-gray-700 mb-6">
+            <div className="flex">
+              <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
+              <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
+              <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
+              <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
+            </div>
+            <a href="/broker-setup" className="text-sm text-indigo-300 hover:text-indigo-200">Broker Setup</a>
+          </div>
 
-      <div className="flex border-b border-gray-700 mb-6">
-        <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
-        <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
-        <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
-        <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
-      </div>
-
-      {tab==="dashboard" && <DashboardTab data={data} />}
-      {tab==="options" && <OptionsEngineTab data={data} />}
-      {tab==="mmi" && <MMITab data={data} />}
-      {tab==="fii-dii" && <FiiDiiTab />}
+          {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
+          {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} livePnl={livePnl} onTradeActivity={registerTradeActivity} />}
+          {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
+          {tab==="fii-dii" && <FiiDiiTab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
+        </>
+      )}
 
     </div>
   );

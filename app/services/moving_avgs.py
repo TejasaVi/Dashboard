@@ -1,6 +1,5 @@
 import yfinance as yf
 import pandas as pd
-from datetime import datetime
 
 # ------------------------ NIFTY ANALYSIS LOGIC ------------------------ #
 
@@ -74,7 +73,7 @@ def calculate_support_resistance(data, yesterday_close, ma_periods):
     resistances.sort(key=lambda x: x['value'])
     return supports[:5], resistances[:5]
 
-def analyze_trend(close, ma_values, ema_values):
+def analyze_trend(close, ma_values):
     trends = []
     if close > ma_values.get('MA_20', 0):
         trends.append("Above 20-day MA (Short-term bullish)")
@@ -138,7 +137,7 @@ def get_nifty_analysis(period="6mo", ma_periods=[10, 20, 50, 100]):
                     'position': 'above' if diff > 0 else 'below'
                 }
 
-        analysis_data['trend_analysis'] = analyze_trend(yesterday_close, ma_values, ema_values)
+        analysis_data['trend_analysis'] = analyze_trend(yesterday_close, ma_values)
         analysis_data['pivot_points'] = calculate_pivot_points(yesterday)
         supports, resistances = calculate_support_resistance(data, yesterday_close, ma_periods)
         analysis_data['support_resistance']['supports'] = supports
