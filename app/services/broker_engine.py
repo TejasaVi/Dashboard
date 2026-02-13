@@ -8,7 +8,6 @@ from app.services.fyers import fyers_client
 from app.services.stoxkart import stoxkart_client
 from app.services.zerodha import zerodha_client
 from app.services.deployment_engine import DeploymentRequest, deployment_engine
-from app.services.trading_state import trading_state
 
 
 @dataclass
@@ -215,51 +214,17 @@ class OrderExecutionEngine:
 
         results: Dict[str, Any] = {}
 
-        analytics = trading_state.analytics()
-        if analytics.get("daily_loss_breached"):
-            return {"success": False, "error": "Daily loss limit breached. Trading blocked by risk controls."}
-
-        if trading_state.settings.paper_trading:
-            broker_name = brokers_to_try[0] if brokers_to_try else self.switcher.active_broker
-            paper_order = {
-                "paper": True,
-                "broker": broker_name,
-                "symbol": f"{order.index_name}-{order.strike or 'SPOT'}-{order.option_type or ''}",
-                "transaction_type": order.transaction_type,
-                "quantity": int(order.quantity),
-                "status": "paper-filled",
-            }
-            trading_state.add_trade({**paper_order, "pnl": 0.0})
-            return {"success": True, "results": {broker_name: {"success": True, "order": paper_order}}, "executed_by": broker_name}
-
         for broker_name in brokers_to_try:
             adapter = self.brokers.get(broker_name)
             if not adapter:
                 results[broker_name] = {"success": False, "error": "Unsupported broker"}
                 continue
             try:
-                placed_order = adapter.place_order(order)
-                results[broker_name] = {"success": True, "order": placed_order}
-                trading_state.add_trade({
-                    "broker": broker_name,
-                    "symbol": f"{order.index_name}-{order.strike or 'SPOT'}-{order.option_type or ''}",
-                    "transaction_type": order.transaction_type,
-                    "quantity": int(order.quantity),
-                    "status": "success",
-                    "pnl": 0.0,
-                })
+                results[broker_name] = {"success": True, "order": adapter.place_order(order)}
                 if failover_enabled:
                     return {"success": True, "results": results, "executed_by": broker_name}
             except Exception as exc:
                 results[broker_name] = {"success": False, "error": str(exc)}
-                trading_state.add_trade({
-                    "broker": broker_name,
-                    "symbol": f"{order.index_name}-{order.strike or 'SPOT'}-{order.option_type or ''}",
-                    "transaction_type": order.transaction_type,
-                    "quantity": int(order.quantity),
-                    "status": "failed",
-                    "pnl": 0.0,
-                })
                 if not failover_enabled:
                     continue
 
