@@ -1223,8 +1223,8 @@ function App() {
   const [brokerStatus, setBrokerStatus] = useState({});
   const [livePnl, setLivePnl] = useState({ success: true, total_pnl: 0, day_m2m: 0, open_positions: 0, source: "Not initialized" });
   const [hasTradeActivity, setHasTradeActivity] = useState(false);
-  const [isBrokerStepComplete, setIsBrokerStepComplete] = useState(false);
   const failoverEnabled = false;
+  const isBrokerSetupPage = window.location.pathname === "/broker-setup";
 
   const refreshBrokerStatus = async () => {
     try {
@@ -1248,6 +1248,10 @@ function App() {
     setHasTradeActivity(true);
   };
 
+  const finishBrokerSetup = () => {
+    window.location.href = "/";
+  };
+
   useEffect(() => {
     refreshBrokerStatus();
   }, []);
@@ -1259,38 +1263,40 @@ function App() {
   }, [hasTradeActivity]);
 
   useEffect(() => {
+    if (!isBrokerSetupPage) return;
     const hasConnectedBroker = Object.values(brokerStatus?.brokers || {}).some((status) => status?.connected);
     if (hasConnectedBroker) {
-      setIsBrokerStepComplete(true);
+      finishBrokerSetup();
     }
-  }, [brokerStatus]);
+  }, [brokerStatus, isBrokerSetupPage]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {!isBrokerStepComplete ? (
+      {isBrokerSetupPage ? (
         <BrokersTab
           selectedBrokers={selectedBrokers}
           setSelectedBrokers={setSelectedBrokers}
           brokerStatus={brokerStatus}
           refreshBrokerStatus={refreshBrokerStatus}
-          onSkip={() => setIsBrokerStepComplete(true)}
-          onContinue={() => setIsBrokerStepComplete(true)}
+          onSkip={finishBrokerSetup}
+          onContinue={finishBrokerSetup}
         />
       ) : (
         <>
-      <div className="flex border-b border-gray-700 mb-6">
-        <div className={`tab ${tab==="brokers"?"tab-active":""}`} onClick={()=>setTab("brokers")}>Brokers</div>
-        <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
-        <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
-        <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
-        <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
-      </div>
+          <div className="flex items-center justify-between border-b border-gray-700 mb-6">
+            <div className="flex">
+              <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
+              <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
+              <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
+              <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
+            </div>
+            <a href="/broker-setup" className="text-sm text-indigo-300 hover:text-indigo-200">Broker Setup</a>
+          </div>
 
-      {tab==="brokers" && <BrokersTab selectedBrokers={selectedBrokers} setSelectedBrokers={setSelectedBrokers} brokerStatus={brokerStatus} refreshBrokerStatus={refreshBrokerStatus} onSkip={() => setTab("dashboard")} onContinue={() => setTab("dashboard")} />}
-      {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
-      {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} livePnl={livePnl} onTradeActivity={registerTradeActivity} />}
-      {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} />}
-      {tab==="fii-dii" && <FiiDiiTab />}
+          {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
+          {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} livePnl={livePnl} onTradeActivity={registerTradeActivity} />}
+          {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} />}
+          {tab==="fii-dii" && <FiiDiiTab />}
         </>
       )}
 

@@ -27,6 +27,10 @@ def create_app(config_class=Config):
     def dashboard():
         return render_template("index.html")
 
+    @app.route("/broker-setup")
+    def broker_setup():
+        return render_template("index.html")
+
     # Register blueprints
     app.register_blueprint(vix_bp, url_prefix="/api")
     app.register_blueprint(pcr_bp, url_prefix="/api")
