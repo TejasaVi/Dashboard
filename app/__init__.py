@@ -14,6 +14,7 @@ from app.api.zerodha import zerodha_bp, zerodha_public_bp
 from app.api.fyers import fyers_bp
 from app.api.brokers import brokers_bp
 from app.api.stoxkart import stoxkart_bp
+from app.api.webhook import webhook_bp
 from app.logging_setup import configure_file_logging, patch_requests_logging
 
 def create_app(config_class=Config):
@@ -46,4 +47,5 @@ def create_app(config_class=Config):
     app.register_blueprint(fyers_bp, url_prefix="/api")
     app.register_blueprint(brokers_bp, url_prefix="/api")
     app.register_blueprint(stoxkart_bp, url_prefix="/api")
+    app.register_blueprint(webhook_bp)
     return app
