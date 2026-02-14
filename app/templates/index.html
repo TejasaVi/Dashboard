@@ -126,6 +126,20 @@ async function getDeploymentStatus(planId) {
   return res.json();
 }
 
+async function getWebhookEvents() {
+  const res = await fetch("/api/webhook/events");
+  return res.json();
+}
+
+async function sendWebhookSignal(payload) {
+  const res = await fetch("/webhook", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 async function configureBrokerCredentials(payload) {
   const res = await fetch("/api/brokers/configure", {
     method: "POST",
@@ -1341,6 +1355,109 @@ function FiiDiiTab({ data, brokerStatus, livePnl }) {
   );
 }
 
+function WebhookSignalsTab({ data, brokerStatus, livePnl }) {
+  const indices = data?.indices;
+  const [form, setForm] = useState({ action: "BUY", symbol: "NIFTY", price: "" });
+  const [events, setEvents] = useState([]);
+  const [message, setMessage] = useState("");
+
+  const refreshEvents = async () => {
+    try {
+      const res = await getWebhookEvents();
+      setEvents(res?.events || []);
+    } catch {
+      setMessage("Unable to fetch webhook events");
+    }
+  };
+
+  useEffect(() => {
+    refreshEvents();
+    const interval = setInterval(refreshEvents, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const submitSignal = async (e) => {
+    e.preventDefault();
+    setMessage("");
+
+    const payload = {
+      action: form.action,
+      symbol: form.symbol.trim() || "NIFTY",
+      price: form.price === "" ? null : Number(form.price),
+    };
+
+    const res = await sendWebhookSignal(payload);
+    if (res.status === "success") {
+      setMessage("Signal received successfully");
+      setForm((prev) => ({ ...prev, price: "" }));
+      refreshEvents();
+      return;
+    }
+
+    setMessage(res.error || "Webhook request failed");
+  };
+
+  return (
+    <div className="space-y-8">
+      <LiveHeaderRow indices={indices} brokerStatus={brokerStatus} livePnl={livePnl} showLivePnl showPlatformStatus={false} mergePlatformStatusIntoIndices />
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="card neutral">
+          <div className="section-title">Webhook Signal Inbound</div>
+          <div className="text-sm text-gray-400 mb-4">Capture external BUY/SELL webhook signals for dashboard monitoring.</div>
+          <form className="space-y-3" onSubmit={submitSignal}>
+            <select
+              className="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-sm"
+              value={form.action}
+              onChange={(e) => setForm((prev) => ({ ...prev, action: e.target.value }))}
+            >
+              <option value="BUY">BUY</option>
+              <option value="SELL">SELL</option>
+            </select>
+            <input
+              type="text"
+              className="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-sm"
+              placeholder="Symbol (e.g., NIFTY)"
+              value={form.symbol}
+              onChange={(e) => setForm((prev) => ({ ...prev, symbol: e.target.value }))}
+            />
+            <input
+              type="number"
+              step="0.01"
+              className="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-sm"
+              placeholder="Price"
+              value={form.price}
+              onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
+            />
+            <div className="flex items-center gap-2">
+              <button type="submit" className="px-3 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-500 text-sm">Send Test Signal</button>
+              <button type="button" onClick={refreshEvents} className="px-3 py-2 rounded-md text-white bg-gray-700 hover:bg-gray-600 text-sm">Refresh</button>
+            </div>
+          </form>
+          {message && <div className="mt-3 text-sm text-indigo-300">{message}</div>}
+        </div>
+
+        <div className="card neutral">
+          <div className="section-title">Recent Webhook Signals</div>
+          <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
+            {events.length === 0 && <div className="text-sm text-gray-400">No webhook signals received yet.</div>}
+            {events.map((event, idx) => (
+              <div key={`${event.timestamp || "evt"}-${idx}`} className={`rounded-md border px-3 py-2 text-sm ${event.action === "BUY" ? "border-green-500/60 bg-green-500/10" : "border-rose-500/60 bg-rose-500/10"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">{event.action || "-"}</span>
+                  <span className="text-xs text-gray-400">{event.timestamp || "-"}</span>
+                </div>
+                <div className="mt-1 text-gray-300">{event.symbol || "Unknown Symbol"} @ {event.price ?? "-"}</div>
+                <div className="text-xs text-gray-400 mt-1">{event.execution || ""}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- MAIN APP ---------------- */
 
 function App() {
@@ -1407,6 +1524,7 @@ function App() {
               <div className={`tab ${tab==="dashboard"?"tab-active":""}`} onClick={()=>setTab("dashboard")}>Market Indicators</div>
               <div className={`tab ${tab==="options"?"tab-active":""}`} onClick={()=>setTab("options")}>Market Options Strategy</div>
               <div className={`tab ${tab==="mmi"?"tab-active":""}`} onClick={()=>setTab("mmi")}>MMI (Investment)</div>
+              <div className={`tab ${tab==="webhook"?"tab-active":""}`} onClick={()=>setTab("webhook")}>Webhook Signals</div>
               <div className={`tab ${tab==="fii-dii"?"tab-active":""}`} onClick={()=>setTab("fii-dii")}>FII DII Data</div>
             </div>
             <a href="/broker-setup" className="text-sm text-indigo-300 hover:text-indigo-200">Broker Setup</a>
@@ -1415,6 +1533,7 @@ function App() {
           {tab==="dashboard" && <DashboardTab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
           {tab==="options" && <OptionsEngineTab data={data} selectedBrokers={selectedBrokers} brokerStatus={brokerStatus} failoverEnabled={failoverEnabled} livePnl={livePnl} onTradeActivity={registerTradeActivity} />}
           {tab==="mmi" && <MMITab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
+          {tab==="webhook" && <WebhookSignalsTab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
           {tab==="fii-dii" && <FiiDiiTab data={data} brokerStatus={brokerStatus} livePnl={livePnl} />}
         </>
       )}
